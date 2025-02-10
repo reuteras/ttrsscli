@@ -1,0 +1,54 @@
+[project]
+name = "ttcli"
+version = "0.0.1"
+authors = [
+  { name="Peter Reuterås", email="peter@reuteras.net" },
+]
+description = "Textual tool to access a Tiny Tiny RSS instance to read articles."
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4>=4.13.3",
+    "requests>=2.32.3",
+    "textual>=1.0.0",
+    "toml>=0.10.2",
+    "ttrss-python",
+]
+
+[project.urls]
+Homepage = "https://github.com/reuteras/ttcli"
+Issues = "https://github.com/reuteras/ttcli/issues"
+
+[tool.uv.sources]
+ttrss-python = { git = "https://github.com/Vassius/ttrss-python.git", rev = "master" }
+
+[dependency-groups]
+dev = [
+    "pylint>=3.3.4",
+    "ruff>=0.9.5",
+    "textual-dev>=1.7.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+lint.select = [
+    "PL",   # Pylint
+    "F",    # pyflakes
+    "I",    # isort
+    "D",    # pydocstyle
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "RUF",  # Ruff-specific
+]
+lint.ignore = [
+    "E501",  # line too long, handled by black
+]
+fix = true
+
+[tool.ruff.lint.pydocstyle]
+convention="google"

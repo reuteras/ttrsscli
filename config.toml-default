@@ -1,0 +1,4 @@
+[ttrss]
+api_url = "op read op://Private/ttrss/url --no-newline"
+username = "op read op://Private/ttrss/login --no-newline"
+password = "op read op://Private/ttrss/API --no-newline"
