@@ -437,17 +437,21 @@ class ttcli(App):
         list_view: ListView = self.query_one(selector="#categories", expect_type=ListView)
         await list_view.clear()
         existing_ids: list[str] = []
+        if self.show_special_categories:
+            unread_only = False
+        else:
+            unread_only = True
         if not categories is None:
             for category in sorted(categories, key=lambda x: x.title):
-                if self.show_unread_only and category.unread == 0:
+                if not self.show_special_categories and self.show_unread_only and category.unread == 0:
                     continue
                 unread_count: str = f" ({category.unread})" if category.unread else ""
                 category_id: str = f"cat_{category.id}"
-                if category_id not in existing_ids:
+                if category_id not in existing_ids and (self.show_special_categories and category.title == "Special"):
                     list_view.append(item=ListItem(Static(content=category.title + unread_count), id=category_id))
                     existing_ids.append(category_id)
                 if self.category_id == category_id and self.expand_category:
-                    feeds: list[Feed] = client.get_feeds(cat_id=category.id, unread_only=True)
+                    feeds: list[Feed] = client.get_feeds(cat_id=category.id, unread_only=unread_only)
                     for feed in feeds:
                         feed_id: str = f"feed_{feed.id}"
                         if feed_id not in existing_ids:
