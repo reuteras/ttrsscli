@@ -123,6 +123,7 @@ class ttcli(App):
         ("?", "toggle_help", "Help"),
         ("c", "clear", "Clear"),
         ("comma", "refresh", "Refresh"),
+        ("d", "toggle_dark", "Toggle dark mode"),
         ("g", "toggle_feeds", "Group feeds"),
         ("h", "toggle_help", "Help"),
         ("H", "toggle_help", "Help"),
@@ -348,6 +349,10 @@ class ttcli(App):
         self.last_key = "S"
         await self.refresh_categories()
         await self.refresh_articles()
+
+    def action_toggle_dark(self) -> None:
+        """An action to toggle dark mode."""
+        self.theme = "textual-dark" if self.theme == "textual-light" else "textual-light"
 
     def action_toggle_star(self) -> None:
         """Toggle article (un)starred."""
