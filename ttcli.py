@@ -130,11 +130,13 @@ class ttcli(App):
         ("j", "next_article", "Next article"),
         ("K", "previous_category", "Previous category"),
         ("k", "previous_article", "Previous article"),
+        ("l", "add_to_later_app", "Add to later app (NOT implemented)"),
         ("m", "screen.maximize", "Maximize"),
         ("M", "screen.minimize", "Minimize"),
         ("n", "next_article", "Next article"),
         ("o", "open_original_article", "Open article in browser"),
         ("q", "quit", "Quit"),
+        ("R", "recently_read", "Open recently read articles (NOT implemented)"),
         ("r", "toggle_read", "Mark Read/Unread"),
         ("e", "toggle_category", "Toggle category selection"),
         ("S", "toggle_special_categories", "Show special categories"),
@@ -187,24 +189,30 @@ class ttcli(App):
         highlighted_item = message.item
 
         if highlighted_item:
+            # Update category index position for navigation
+            if hasattr(highlighted_item, "parent") and hasattr(highlighted_item.parent, "index"):
+                self.category_index = highlighted_item.parent.index
+
             # Handle category selection -> refresh articles
             if highlighted_item.id.startswith("cat_"):
                 category_id = int(highlighted_item.id.replace("cat_", ""))
                 self.category_id = highlighted_item.id
-                self.category_index = highlighted_item.parent.index
                 await self.refresh_articles(show_id=category_id)
+
             # Handle feed selection in expanded category view -> refresh articles
             elif highlighted_item.id.startswith("feed_"):
                 await self.refresh_articles(show_id=highlighted_item.id)
+
             # Handle feed title selection in article list -> navigate articles
             elif highlighted_item.id.startswith("ft_"):
                 if self.last_key == "j":
-                    await self.action_next_article()
+                    self.action_next_article()
                 elif self.last_key == "k":
                     if highlighted_item.parent.index == 0:
-                        await self.action_next_article()
+                        self.action_next_article()
                     else:
-                        await self.action_previous_article()
+                        self.action_previous_article()
+
             # Handle article selection -> display selected article content
             elif highlighted_item.id.startswith("art_"):
                 article_id = int(highlighted_item.id.replace("art_", ""))
@@ -221,7 +229,8 @@ class ttcli(App):
             if selected_item.id.startswith("cat_"):
                 category_id = int(selected_item.id.replace("cat_", ""))
                 await self.refresh_articles(show_id=category_id)
-                await self.action_focus_next_pane()
+                self.action_focus_next_pane()
+
             # Handle article selection
             elif selected_item.id.startswith("art_"):
                 article_id = int(selected_item.id.replace("art_", ""))
@@ -234,19 +243,13 @@ class ttcli(App):
         await self.refresh_categories()
         await self.refresh_articles()
 
-        categories: list[Category] = client.get_categories()
-        max_length: int = max(len(category.title) for category in categories) # type: ignore
-        estimated_width: int = max_length + 2
-        categories_list: ListView = self.query_one(selector="#categories", expect_type=ListView)
-        categories_list.styles.width = f"{estimated_width}"
-
     async def action_clear(self) -> None:
         """Clear content window."""
         self.article_id = 0
         content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
-        content_view.document.update(markdown=self.START_TEXT)
+        await content_view.document.update(markdown=self.START_TEXT)
 
-    async def action_focus_next_pane(self) -> None:
+    def action_focus_next_pane(self) -> None:
         """Move focus to the next pane."""
         panes: list[str] = ["categories", "articles", "content"]
         current_focus: Widget | None = self.focused
@@ -257,7 +260,7 @@ class ttcli(App):
                 next_pane: Widget = self.query_one(selector=f"#{panes[next_index]}")
                 next_pane.focus()
 
-    async def action_focus_previous_pane(self) -> None:
+    def action_focus_previous_pane(self) -> None:
         """Move focus to the previous pane."""
         panes: list[str] = ["categories", "articles", "content"]
         current_focus: Widget | None = self.focused
@@ -268,14 +271,14 @@ class ttcli(App):
                 previous_pane: Widget = self.query_one(selector=f"#{panes[previous_index]}")
                 previous_pane.focus()
 
-    async def action_next_article(self) -> None:
+    def action_next_article(self) -> None:
         """Open next article."""
         self.last_key = "j"
         list_view: ListView = self.query_one(selector="#articles", expect_type=ListView)
         list_view.focus()
         list_view.action_cursor_down()
 
-    async def action_next_category(self) -> None:
+    def action_next_category(self) -> None:
         """Move to next category."""
         list_view: ListView = self.query_one(selector="#categories", expect_type=ListView)
         list_view.focus()
@@ -285,14 +288,14 @@ class ttcli(App):
             list_view.index = self.category_index
         list_view.action_cursor_down()
 
-    async def action_open_original_article(self) -> None:
+    def action_open_original_article(self) -> None:
         """Open the original article in a web browser."""
         if hasattr(self, 'current_article_url') and self.current_article_url:
             webbrowser.open(self.current_article_url)
         else:
             print("No article selected or no URL available.")
 
-    async def action_previous_article(self) -> None:
+    def action_previous_article(self) -> None:
         """Open previous article."""
         self.last_key = "k"
         list_view: ListView = self.query_one(selector="#articles", expect_type=ListView)
@@ -300,7 +303,7 @@ class ttcli(App):
         if not list_view.index == 0 or (self.group_feeds and list_view.index == 1):
             list_view.action_cursor_up()
 
-    async def action_previous_category(self) -> None:
+    def action_previous_category(self) -> None:
         """Move to previous category."""
         list_view: ListView = self.query_one(selector="#categories", expect_type=ListView)
         list_view.focus()
@@ -325,14 +328,14 @@ class ttcli(App):
         self.group_feeds = not self.group_feeds
         await self.refresh_articles()
 
-    async def action_toggle_help(self) -> None:
+    def action_toggle_help(self) -> None:
         """Toggle the help screen."""
         if isinstance(self.screen, HelpScreen):
             self.pop_screen()
         else:
             self.push_screen(screen=HelpScreen())
 
-    async def action_toggle_read(self) -> None:
+    def action_toggle_read(self) -> None:
         """Toggle article read and unread."""
         if hasattr(self, 'article_id') and self.article_id:
             client.toggle_unread(article_id=self.article_id)
@@ -342,10 +345,11 @@ class ttcli(App):
     async def action_toggle_special_categories(self) -> None:
         """Toggle special categories."""
         self.show_special_categories = not self.show_special_categories
+        self.last_key = "S"
         await self.refresh_categories()
         await self.refresh_articles()
 
-    async def action_toggle_star(self) -> None:
+    def action_toggle_star(self) -> None:
         """Toggle article (un)starred."""
         if hasattr(self, 'article_id') and self.article_id:
             client.toggle_starred(article_id=self.article_id)
@@ -363,43 +367,42 @@ class ttcli(App):
         try:
             # Fetch the full article
             articles: list[Article] = client.get_articles(article_id=article_id)
-            if articles:
-                article: Article = articles[0]
-
-                # Parse and clean the HTML
-                soup = BeautifulSoup(markup=article.content, features="html.parser")
-                self.current_article_url = article.link
-
-                # Make links clickable
-                for a in soup.find_all(name="a"):
-                    a.string = f"[{a.get_text()}]({a['href']})"
-
-                clean_content: str = soup.get_text(separator="\n\n", strip=True)
-
-                # Display the cleaned content
-                content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
-                content_view.document.update(markdown=clean_content)
-
-                client.mark_read(article_id=article_id)
-                await self.refresh_categories()
-
-            else:
-                print(f"No article found with ID {article_id}")
-
         except Exception as err:
             print(f"Error fetching article content: {err}")
+
+        if articles:
+            article: Article = articles[0]
+
+            # Parse and clean the HTML
+            soup = BeautifulSoup(markup=article.content, features="html.parser")
+            self.current_article_url = article.link
+
+            # Make links clickable
+            try:
+                for a in soup.find_all(name="a"):
+                    a.string = f"[{a.get_text()}]({a['href']})"
+            except KeyError:
+                pass
+
+            clean_content: str = soup.get_text(separator="\n\n", strip=True)
+
+            # Display the cleaned content
+            content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
+            content_view.document.update(markdown=clean_content)
+
+            client.mark_read(article_id=article_id)
+            await self.refresh_categories()
+        else:
+            print(f"No article found with ID {article_id}")
 
     async def refresh_articles(self, show_id=None) -> None:
         """Load articles from selected category or all articles."""
         if self.show_special_categories:
             view_mode = 'all_articles'
         else:
-            view_mode = 'unread'
+            view_mode = 'unread' if self.show_unread_only else 'all_articles'
 
-        if self.show_special_categories:
-            feed_id = -1
-            is_cat = False
-        elif not isinstance(show_id, int) and not show_id is None and show_id.startswith("feed_"):
+        if not isinstance(show_id, int) and not show_id is None and show_id.startswith("feed_"):
             feed_id = int(show_id.replace("feed_", ""))
             is_cat = False
         elif show_id is not None:
@@ -416,7 +419,7 @@ class ttcli(App):
             articles: list[Headline] = client.get_headlines(feed_id=feed_id, is_cat=is_cat, view_mode=view_mode)
             feed_title: str = ""
             for article in articles:
-                if self.group_feeds and feed_title != article.feed_title:
+                if self.group_feeds and article.feed_title and feed_title != article.feed_title:
                     feed_title = article.feed_title
                     feed_title_item = ListItem(Static(content=html.unescape(feed_title)), id=f"ft_{article.feed_id}")
                     feed_title_item.styles.color = "white"
@@ -433,31 +436,61 @@ class ttcli(App):
 
     async def refresh_categories(self) -> None:
         """Load categories from TTRSS and filter based on unread-only mode."""
+        existing_ids: list[str] = []
+
+        # Get all categories
         categories: list[Category] = client.get_categories()
+
+        # Listview for categories and clear it
         list_view: ListView = self.query_one(selector="#categories", expect_type=ListView)
         await list_view.clear()
-        existing_ids: list[str] = []
-        if self.show_special_categories:
-            unread_only = False
-        else:
-            unread_only = True
+
+        unread_only: bool = False if self.show_special_categories else True
+        max_length: int = 0
+
         if not categories is None:
             for category in sorted(categories, key=lambda x: x.title):
+                # Skip categories with no unread articles if unread-only mode is enabled and special categories are hidden
                 if not self.show_special_categories and self.show_unread_only and category.unread == 0:
                     continue
-                unread_count: str = f" ({category.unread})" if category.unread else ""
+
+                # category_id is used if expand_category is enabled
                 category_id: str = f"cat_{category.id}"
-                if category_id not in existing_ids and (self.show_special_categories and category.title == "Special"):
-                    list_view.append(item=ListItem(Static(content=category.title + unread_count), id=category_id))
+
+                # Top-level categories
+                if category_id not in existing_ids:
+                    # Handle view special categories
+                    if (self.show_special_categories and category.title == "Special"):
+                        article_count: str = f" ({category.unread})" if category.unread else ""
+                        max_length = max(max_length, len(category.title))
+                        list_view.append(item=ListItem(Static(content=category.title + article_count), id=category_id))
+                    # Handle normal categories
+                    elif (not self.show_special_categories and category.title != "Special"):
+                        article_count: str = f" ({category.unread})" if category.unread else ""
+                        max_length = max(max_length, len(category.title))
+                        list_view.append(item=ListItem(Static(content=category.title + article_count), id=category_id))
+                    else:
+                        article_count = ""
                     existing_ids.append(category_id)
-                if self.category_id == category_id and self.expand_category:
+
+                # Expand category view to show feeds or show special categories (always expanded)
+                if (self.expand_category and self.category_id == category_id) or (self.show_special_categories and category.title == "Special"):
                     feeds: list[Feed] = client.get_feeds(cat_id=category.id, unread_only=unread_only)
                     for feed in feeds:
                         feed_id: str = f"feed_{feed.id}"
                         if feed_id not in existing_ids:
                             feed_unread_count: str = f" ({feed.unread})" if feed.unread else ""
+                            max_length = max(max_length, len(feed.title) + 3)
                             list_view.append(item=ListItem(Static(content="  " + feed.title + feed_unread_count), id=feed_id))
                             existing_ids.append(feed_id)
+                    if self.show_special_categories and self.last_key == "S":
+                        list_view.index = 1
+                        self.last_key = ""
+
+        # Set category listview width based on longest category name
+        estimated_width: int = max(max_length + 5, 15)
+        estimated_width = min(estimated_width, 80)
+        list_view.styles.width = estimated_width
 
 if __name__ == "__main__":
     app = ttcli()
