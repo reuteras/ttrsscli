@@ -3,7 +3,7 @@
 /* Style for the categories ListView */
 #categories {
     width: 1fr; /* Flexible width */
-    max-width: 30%; /* Maximum width of 30% */
+    max-width: 50%; /* Maximum width of 30% */
 }
 
 /* Style for the articles ListView */
@@ -11,7 +11,7 @@
     height: auto; /* Automatic height */
     max-height: 40%; /* Maximum height of 40% */
     min-height: 10;
-    margin-bottom: 2;  /* Space below the article list */
+    margin-bottom: 1;  /* Space below the article list */
 }
 
 Header {
@@ -20,4 +20,3 @@ Header {
     height: 1;
     content-align: center top;
 }
-
