@@ -14,8 +14,9 @@ license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
     "beautifulsoup4>=4.13.3",
+    "markdownify>=0.14.1",
     "requests>=2.32.3",
-    "textual>=1.0.0",
+    "textual[syntax]>=1.0.0",
     "toml>=0.10.2",
     "ttrss-python",
 ]
