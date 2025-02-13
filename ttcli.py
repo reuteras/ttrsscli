@@ -3,10 +3,12 @@ import html
 import subprocess
 import sys
 import webbrowser
+from collections.abc import Generator
 from typing import Any, ClassVar
 
 import toml
 from bs4 import BeautifulSoup
+from markdownify import markdownify
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -23,6 +25,7 @@ from textual.widgets import (
     Markdown,
     MarkdownViewer,
     Static,
+    TextArea,
 )
 from ttrss.client import Article, Category, Feed, Headline, TTRClient
 from ttrss.exceptions import TTRNotLoggedIn
@@ -58,6 +61,9 @@ except (FileNotFoundError, toml.TomlDecodeError) as err:
     print(f"Error reading configuration file: {err}")
     sys.exit(1)
 
+# Shared constants
+ALLOW_IN_FULL_SCREEN: list[str] = ["arrow_up", "arrow_down", "page_up", "page_down", "down", "up", "right", "left"]
+
 # Connect to TTRSS
 try:
     client = TTRClient(url=api_url, user=username, password=password, auto_login=True)
@@ -81,35 +87,77 @@ class LinkableMarkdownViewer(MarkdownViewer):
             webbrowser.open(url=event.href)
 
 
+class FullScreenMarkdown(Screen):
+    """A full-screen Markdown viewer."""
+    def __init__(self, markdown_content: str) -> None:
+        """Initialize the full-screen Markdown viewer."""
+        super().__init__()
+        self.markdown_content: str = markdown_content
+
+    def compose(self) -> Generator[LinkableMarkdownViewer, Any, None]:
+        """Define the content layout of the full-screen Markdown viewer."""
+        yield LinkableMarkdownViewer(markdown=self.markdown_content, show_table_of_contents=True)
+    
+    def on_key(self, event) -> None:
+        """Close the full-screen Markdown viewer on any key press."""
+        if event.key in ALLOW_IN_FULL_SCREEN:
+            pass
+        else:
+            self.app.pop_screen()
+
+
+class FullScreenTextArea(Screen):
+    """A full-screen TextArea."""
+    def __init__(self, text: str) -> None:
+        """Initialize the full-screen TextArea."""
+        super().__init__()
+        self.text: str = text
+
+    def compose(self) -> Generator[TextArea, Any, None]:
+        """Define the content layout of the full-screen TextArea."""
+        yield TextArea.code_editor(text=self.text, language="markdown", read_only=True)
+    
+    def on_key(self, event) -> None:
+        """Close the full-screen TextArea on any key press."""
+        print(event.key)
+        if event.key in ALLOW_IN_FULL_SCREEN:
+            pass
+        else:
+            self.app.pop_screen()
+
+
 class HelpScreen(Screen):
     """A modal help screen."""
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the help screen."""
         yield LinkableMarkdownViewer(
-            markdown="""## ttcli TUI Help
+            markdown="""# Help for ttcli
+
+Key bindings:
 - **h / H / ?**: Show this help
 - **c**: Clear content in article pane
+- **ctrl+s**: View markdown source
+- **d**: Toggle dark mode
 - **e**: Toggle expand category
 - **g**: Toggle group feeds
+- **G / ,**: Refresh
 - **j / k / n**: Navigate articles
 - **J / K**: Navigate categories
-- **m**: Maximize pane
-- **M**: Minimize pane
+- **m**: Maximize content pane (ESC to minimize)
 - **o**: Open article in browser
+- **q**: Quit
+- **R**: Open recently read articles
 - **r**: Toggle read/unread
-- **s**: Star article
 - **S**: Show special categories
+- **s**: Star article
 - **u**: Toggle unread only
-- **o**: Open article in browser
 - **r**: Mark read/unread
 - **s**: Star article
 - **u**: Show unread categories
-- **,** : Refresh
 - **tab / shift+tab**: Navigate panes
-- **q**: Quit
 
-For more information, see the [GitHub repository](https://github.com/reuteras/ttcli) for ttcli.
+For more information, see the [GitHub repository](https://github.com/reuteras/ttcli) for ttcli. For more about Tiny Tiny RSS, see the [Tiny Tiny RSS website](https://tt-rss.org/).
 """,
             id="fullscreen-content",
             show_table_of_contents=False,
@@ -123,7 +171,10 @@ class ttcli(App):
         ("?", "toggle_help", "Help"),
         ("c", "clear", "Clear"),
         ("comma", "refresh", "Refresh"),
+        ("ctrl+s", "view_source", "View md source"),
         ("d", "toggle_dark", "Toggle dark mode"),
+        ("e", "toggle_category", "Toggle category selection"),
+        ("G", "refresh", "Refresh"),
         ("g", "toggle_feeds", "Group feeds"),
         ("h", "toggle_help", "Help"),
         ("H", "toggle_help", "Help"),
@@ -132,14 +183,12 @@ class ttcli(App):
         ("K", "previous_category", "Previous category"),
         ("k", "previous_article", "Previous article"),
         ("l", "add_to_later_app", "Add to later app (NOT implemented)"),
-        ("m", "screen.maximize", "Maximize"),
-        ("M", "screen.minimize", "Minimize"),
+        ("m", "maximize_content", "Maximize content pane"),
         ("n", "next_article", "Next article"),
         ("o", "open_original_article", "Open article in browser"),
         ("q", "quit", "Quit"),
-        ("R", "recently_read", "Open recently read articles (NOT implemented)"),
+        ("R", "recently_read", "Open recently read articles"),
         ("r", "toggle_read", "Mark Read/Unread"),
-        ("e", "toggle_category", "Toggle category selection"),
         ("S", "toggle_special_categories", "Show special categories"),
         ("s", "toggle_star", "Star article"),
         ("shift+tab", "focus_previous_pane", "Previous pane"),
@@ -160,6 +209,8 @@ class ttcli(App):
     category_id = None
     # Current category index position
     category_index: int = 0
+    # Content pane markdown content
+    content_markdown: str = START_TEXT
     # Current article URL (for opening in browser with 'o')
     current_article_url = None
     # Expand category view to show feeds for selected category
@@ -246,9 +297,9 @@ class ttcli(App):
 
     async def action_clear(self) -> None:
         """Clear content window."""
-        self.article_id = 0
+        self.content_markdown = self.START_TEXT
         content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
-        await content_view.document.update(markdown=self.START_TEXT)
+        await content_view.document.update(markdown=self.content_markdown)
 
     def action_focus_next_pane(self) -> None:
         """Move focus to the next pane."""
@@ -271,6 +322,13 @@ class ttcli(App):
                 previous_index: int = (panes.index(current_id) - 1) % len(panes)
                 previous_pane: Widget = self.query_one(selector=f"#{panes[previous_index]}")
                 previous_pane.focus()
+
+    def action_maximize_content(self) -> None:
+        """Maximize the content pane."""
+        if isinstance(self.screen, FullScreenMarkdown):
+            self.pop_screen()
+        else:
+            self.push_screen(screen=FullScreenMarkdown(markdown_content=self.content_markdown))
 
     def action_next_article(self) -> None:
         """Open next article."""
@@ -314,6 +372,12 @@ class ttcli(App):
             list_view.index = self.category_index
         list_view.action_cursor_up()
 
+    async def action_recently_read(self) -> None:
+        """Open recently read articles."""
+        self.show_special_categories = True
+        self.last_key = "R"
+        await self.refresh_categories()
+
     async def action_refresh(self) -> None:
         """Refresh categories and articles from the server."""
         await self.refresh_categories()
@@ -347,8 +411,9 @@ class ttcli(App):
         """Toggle special categories."""
         self.show_special_categories = not self.show_special_categories
         self.last_key = "S"
+        article_list: ListView = self.query_one(selector="#articles", expect_type=ListView)
+        article_list.clear()
         await self.refresh_categories()
-        await self.refresh_articles()
 
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""
@@ -367,6 +432,13 @@ class ttcli(App):
         await self.refresh_categories()
         await self.refresh_articles()
 
+    def action_view_source(self) -> None:
+        """View markdown source."""
+        if isinstance(self.screen, FullScreenTextArea):
+            self.pop_screen()
+        else:
+            self.push_screen(screen=FullScreenTextArea(text=str(self.content_markdown)))
+
     async def display_article_content(self, article_id: int) -> None:
         """Fetch, clean, and display the selected article's content."""
         try:
@@ -382,18 +454,11 @@ class ttcli(App):
             soup = BeautifulSoup(markup=article.content, features="html.parser")
             self.current_article_url = article.link
 
-            # Make links clickable
-            try:
-                for a in soup.find_all(name="a"):
-                    a.string = f"[{a.get_text()}]({a['href']})"
-            except KeyError:
-                pass
-
-            clean_content: str = soup.get_text(separator="\n\n", strip=True)
+            self.content_markdown: str = markdownify(str(soup)).replace('xml encoding="UTF-8"', "")
 
             # Display the cleaned content
             content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
-            content_view.document.update(markdown=clean_content)
+            content_view.document.update(markdown=self.content_markdown)
 
             client.mark_read(article_id=article_id)
             await self.refresh_categories()
@@ -479,7 +544,7 @@ class ttcli(App):
                     existing_ids.append(category_id)
 
                 # Expand category view to show feeds or show special categories (always expanded)
-                if (self.expand_category and self.category_id == category_id) or (self.show_special_categories and category.title == "Special"):
+                if (self.expand_category and self.category_id == category_id and not self.show_special_categories) or (self.show_special_categories and category.title == "Special"):
                     feeds: list[Feed] = client.get_feeds(cat_id=category.id, unread_only=unread_only)
                     for feed in feeds:
                         feed_id: str = f"feed_{feed.id}"
@@ -490,6 +555,9 @@ class ttcli(App):
                             existing_ids.append(feed_id)
                     if self.show_special_categories and self.last_key == "S":
                         list_view.index = 1
+                        self.last_key = ""
+                    elif self.last_key == "R":
+                        list_view.index = 5
                         self.last_key = ""
 
         # Set category listview width based on longest category name
