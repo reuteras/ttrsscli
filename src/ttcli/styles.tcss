@@ -1,5 +1,16 @@
 /* styles.tcss */
 
+Header {
+    background: darkblue;
+    color: white;
+    height: 1;
+    content-align: center top;
+}
+
+OptionList {
+    align: center middle;
+}
+
 /* Style for the categories ListView */
 #categories {
     width: 1fr; /* Flexible width */
@@ -14,9 +25,3 @@
     margin-bottom: 1;  /* Space below the article list */
 }
 
-Header {
-    background: darkblue;
-    color: white;
-    height: 1;
-    content-align: center top;
-}

@@ -48,11 +48,12 @@ password = "your_password"  # Or "op read op://Private/ttrss/password --no-newli
 Start `ttcli`.
 
 ```sh
-textual run ttcli.py;
+textual run ttcli.py
 ```
 
 ## Keyboard Shortcuts
 
+```sh
 | Key                   | Action                         |
 |-----------------------|--------------------------------|
 | `?` / `h` / `H`       | Show help screen               |
@@ -70,6 +71,7 @@ textual run ttcli.py;
 | `,`                   | Refresh feeds                  |
 | `tab` / `shift+tab`   | Switch between panes           |
 | `q`                   | Quit application               |
+```
 
 ## License
 
@@ -82,3 +84,13 @@ Contributions, issues, and feature requests are welcome! Feel free to open an is
 ## Author
 
 Developed by [reuteras](https://github.com/reuteras).
+
+## Roadmap
+
+Some thoughts are listed below:
+
+- Implement more functions from the [Python API] https://github.com/Vassius/ttrss-python/blob/master/ttrss/client.py). For example add and remove feeds.
+- Should a use [timer]( https://textual.textualize.io/api/timer/) to check that updater is running and indicate it?
+- Add code for [testing](https://textual.textualize.io/guide/testing/)?
+- Switch to rich [markdown](https://rich.readthedocs.io/en/stable/markdown.html)
+- Add support for [images](https://github.com/Textualize/textual/discussions/4345) via [rich-pixels](https://github.com/darrenburns/rich-pixels)

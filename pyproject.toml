@@ -1,6 +1,6 @@
 [project]
 name = "ttcli"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
   { name="Peter Reuterås", email="peter@reuteras.net" },
 ]
@@ -14,16 +14,25 @@ license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
     "beautifulsoup4>=4.13.3",
+    "cleanurl>=0.1.15",
+    "httpx>=0.28.1",
     "markdownify>=0.14.1",
+    "readwise-api>=0.3.0",
     "requests>=2.32.3",
     "textual[syntax]>=1.0.0",
     "toml>=0.10.2",
     "ttrss-python",
 ]
+[project.scripts]
+ttcli = "ttcli:main"
 
 [project.urls]
 Homepage = "https://github.com/reuteras/ttcli"
 Issues = "https://github.com/reuteras/ttcli/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.uv.sources]
 ttrss-python = { git = "https://github.com/Vassius/ttrss-python.git", rev = "master" }
