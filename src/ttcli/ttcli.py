@@ -822,7 +822,6 @@ class ttcli(App):
             view_mode = 'all_articles'
         else:
             view_mode = 'unread' if self.show_unread_only else 'all_articles'
-        view_mode = 'unread'
 
         # Determine if the selected item is a category or feed
         if not isinstance(show_id, int) and not show_id is None and show_id.startswith("feed_"):
