@@ -5,9 +5,10 @@ import os
 import subprocess
 import sys
 import webbrowser
+from collections import OrderedDict
 from collections.abc import Generator
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 from urllib.parse import quote
 
 import httpx
@@ -38,6 +39,22 @@ from ttrss.client import Article, Category, Feed, Headline, TTRClient
 from ttrss.exceptions import TTRNotLoggedIn
 from urllib3.exceptions import NameResolutionError
 
+
+class LimitedSizeDict(OrderedDict):
+    """A dictionary that holds at most `max_size` items and removes the oldest when full."""
+
+    def __init__(self, max_size: int) -> None:
+        """Initialize the LimitedSizeDict."""
+        self.max_size: int = max_size
+        super().__init__()
+
+    def __setitem__(self, key, value) -> None:
+        """Set an item in the dictionary, removing the oldest if full."""
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        if len(self) > self.max_size:
+            self.popitem(last=False)
 
 # Helper function to retrieve credentials from 1Password CLI or return the value directly
 def get_conf_value(op_command) -> str:
@@ -103,7 +120,7 @@ class TTRSSClient:
     def get_articles(self, article_id) -> list[Article]:
         """Fetch article content, retrying if session expires."""
         return self.api.get_articles(article_id=article_id)
-    
+
     @handle_session_expiration
     def get_categories(self) -> list[Category]:
         """Fetch category list, retrying if session expires."""
@@ -125,10 +142,15 @@ class TTRSSClient:
         self.api.mark_read(article_id=article_id)
 
     @handle_session_expiration
+    def mark_unread(self, article_id) -> None:
+        """Mark article as unread, retrying if session expires."""
+        self.api.mark_unread(article_id=article_id)
+
+    @handle_session_expiration
     def toggle_starred(self, article_id) -> None:
         """Toggle article starred, retrying if session expires."""
         self.api.toggle_starred(article_id=article_id)
-    
+
     @handle_session_expiration
     def toggle_unread(self, article_id) -> None:
         """Toggle article read/unread, retrying if session expires."""
@@ -209,11 +231,11 @@ except NameResolutionError:
 class LinkSelectionScreen(ModalScreen):
     """Modal screen to show extracted links and allow selection."""
 
-    def __init__(self, links, open_links="browser") -> None:
+    def __init__(self, links, open_links="browser", open=False) -> None:
         """Initialize the link selection screen."""
         """
         links: list of tuples with link title and URL
-        open_links: 
+        open_links:
             - "browser" to open link in browser
             - "download" to save link to download folder
             - "readwise" to save link to Readwise
@@ -221,6 +243,7 @@ class LinkSelectionScreen(ModalScreen):
         super().__init__()
         self.links: Any = links
         self.open_links: str = open_links
+        self.open: bool = open
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the link selection screen."""
@@ -236,12 +259,12 @@ class LinkSelectionScreen(ModalScreen):
 
     def download_file(self, link: str) -> None:
         """Download a file from the given URL and save to download folder."""
-        try: 
+        try:
             with httpx.Client() as http_client:
                 httpx_response: httpx.Response = http_client.get(url=link, follow_redirects=True)
         except Exception as err:
             self.notify(title="Download", message=f"Error downloading {link}. Error {err}", timeout=5, severity="error")
-        
+
         if httpx_response.status_code == httpx.codes.OK:
             try:
                 filename: str = httpx_response.url.path.split(sep="/")[-1]
@@ -249,7 +272,7 @@ class LinkSelectionScreen(ModalScreen):
             except Exception:
                 filename = "index.dat"
             filename = "index.dat" if filename == "" else filename
-            
+
             # Save the file to the download folder
             try:
                 with open(file=os.path.join(download_folder, filename), mode="wb") as file:
@@ -285,7 +308,9 @@ class LinkSelectionScreen(ModalScreen):
                 if response[1].url and response[1].id:
                     self.notify(title="Readwise", message=f"Url {link} saved.", timeout=5)
                 else:
-                    self.notify(title="Readwise", message=f"Error saving url {link}.", timeout=5, severity="error")        
+                    self.notify(title="Readwise", message=f"Error saving url {link}.", timeout=5, severity="error")
+                if self.open:
+                    webbrowser.open(url=response[1].url)
         self.app.pop_screen()
 
 
@@ -310,7 +335,7 @@ class FullScreenMarkdown(Screen):
     def compose(self) -> Generator[LinkableMarkdownViewer, Any, None]:
         """Define the content layout of the full-screen Markdown viewer."""
         yield LinkableMarkdownViewer(markdown=self.markdown_content, show_table_of_contents=True)
-    
+
     def on_key(self, event) -> None:
         """Close the full-screen Markdown viewer on any key press."""
         if event.key in ALLOW_IN_FULL_SCREEN:
@@ -329,7 +354,7 @@ class FullScreenTextArea(Screen):
     def compose(self) -> Generator[TextArea, Any, None]:
         """Define the content layout of the full-screen TextArea."""
         yield TextArea.code_editor(text=self.text, language="markdown", read_only=True)
-    
+
     def on_key(self, event) -> None:
         """Close the full-screen TextArea on any key press."""
         if event.key in ALLOW_IN_FULL_SCREEN:
@@ -345,21 +370,23 @@ class HelpScreen(Screen):
         """Define the content layout of the help screen."""
         yield LinkableMarkdownViewer(
             markdown="""# Help for ttcli
-## Navigation       
+## Navigation
 - **j / k / n**: Navigate articles
 - **J / K**: Navigate categories
 - **Arrow keys**: Up and down in current pane
 - **tab / shift+tab**: Navigate panes
 
 ## General keys
-- **h / H / ?**: Show this help
+- **h / ?**: Show this help
 - **q**: Quit
 - **G / ,**: Refresh
 - **c**: Clear content in article pane
 - **d**: Toggle dark and light mode
 
 ## Article keys
+- **H**: Toggle "header" (info) for article
 - **l**: Add article to Readwise
+- **L**: Add article to Readwise and open that Readwise page in browser
 - **M**: View markdown source for article
 - **m**: Maximize content pane (ESC to minimize)
 - **r**: Toggle read/unread
@@ -367,6 +394,7 @@ class HelpScreen(Screen):
 - **O**: Export markdown to Obsidian
 - **o**: Open article in browser
 - **ctrl+l**: Open list with links in article, selected link is sent to Readwise
+- **ctrl+L**: Open list with links in article, selected link is sent to Readwise and opened in browser
 - **ctrl+o**: Open list with links in article, selected link opens in browser
 - **ctrl+s**: Save selected link from article to download folder
 
@@ -397,19 +425,21 @@ class ttcli(App):
         ("c", "clear", "Clear"),
         ("comma", "refresh", "Refresh"),
         ("ctrl+l", "readwise_article_url", "Add link in article to later app"),
+        ("ctrl+shift+l", "readwise_article_url_and_open", "Add link in article to later app"),
         ("ctrl+o", "open_article_url", "Open article urls"),
         ("ctrl+s", "save_article_url", "Save link to download folder"),
         ("d", "toggle_dark", "Toggle dark mode"),
         ("e", "toggle_category", "Toggle category selection"),
         ("G", "refresh", "Refresh"),
         ("g", "toggle_feeds", "Group feeds"),
+        ("H", "toggle_header", "Header"),
         ("h", "toggle_help", "Help"),
-        ("H", "toggle_help", "Help"),
         ("J", "next_category", "Next category"),
         ("j", "next_article", "Next article"),
         ("K", "previous_category", "Previous category"),
         ("k", "previous_article", "Previous article"),
         ("l", "add_to_later_app", "Add to later app"),
+        ("L", "add_to_later_app_and_open", "Add to later app and open"),
         ("M", "view_markdown_source", "View md source"),
         ("m", "maximize_content", "Maximize content pane"),
         ("n", "next_article", "Next article"),
@@ -442,6 +472,8 @@ class ttcli(App):
     clean_url: bool = True
     # Content pane markdown content
     content_markdown: str = START_TEXT
+    # Current article
+    current_article: Article | None = None
     # Current article title
     current_article_title: str = ""
     # Current article URL (for opening in browser with 'o')
@@ -454,10 +486,14 @@ class ttcli(App):
     group_feeds: bool = True
     # Last key pressed (for j/k navigation)
     last_key: str = ""
+    # Show header info for article
+    show_header: bool = False
     # Show unread categories only
     show_unread_only = reactive(default=True)
     # Show special categories
     show_special_categories: bool = False
+    # Tags for articles
+    tags = LimitedSizeDict(max_size=10000)
 
     def compose(self) -> ComposeResult:
         """Compose the three pane layout."""
@@ -534,7 +570,7 @@ class ttcli(App):
         await self.refresh_categories()
         await self.refresh_articles()
 
-    def action_add_to_later_app(self) -> None:
+    def action_add_to_later_app(self, open=False) -> None:
         """Add article to later app."""
         if not readwise_token:
             print("No Readwise token found.")
@@ -547,12 +583,18 @@ class ttcli(App):
             if response[1].url and response[1].id:
                 print("Article saved to Readwise.")
                 self.notify(title="Readwise", message=f"Url {self.current_article_url} saved.", timeout=5)
+                if open:
+                    webbrowser.open(url=response[1].url)
             else:
                 print("Error saving article to Readwise.")
                 self.notify(title="Readwise", message=f"Error saving url {self.current_article_url}.", timeout=5, severity="error")
         else:
             print("No article selected or no URL available.")
             self.notify(title="Readwise", message="No article selected or no URL available.", timeout=5, severity="warning")
+
+    def action_add_to_later_app_and_open(self) -> None:
+        """Add article to later app and open that Readwise page in browser."""
+        self.action_add_to_later_app(open=True)
 
     async def action_clear(self) -> None:
         """Clear content window."""
@@ -588,7 +630,15 @@ class ttcli(App):
             content = content.replace("<CONTENT>", self.content_markdown)
             content = content.replace("<TITLE>", self.current_article_title)
             # TODO: Support tags from Tiny Tiny RSS
-            content = content.replace("<TAGS>", obsidian_default_tag)
+            if self.show_header:
+                try:
+                    tags: str = "\n".join(f"  - {item}  " for item in self.tags[self.current_article.id]) # type: ignore
+                except KeyError:
+                    tags = ""
+                tags = obsidian_default_tag + "\n" + tags
+                content = content.replace("<TAGS>", tags)
+            else:
+                content = content.replace("<TAGS>", obsidian_default_tag)
             # Encode title and content for URL format
             encoded_title: str = quote(string=title).replace("/", "%2F")
             encoded_content: str = quote(string=content)
@@ -654,10 +704,10 @@ class ttcli(App):
     async def action_open_article_url(self):
         """Open links from the article in a web browser."""
         if hasattr(self, 'current_article_urls') and self.current_article_urls:
-            self.push_screen(LinkSelectionScreen(self.current_article_urls))
+            self.push_screen(screen=LinkSelectionScreen(links=self.current_article_urls))
         else:
-            self.notify("No links found!", title="Info")
-        
+            self.notify(message="No links found!", title="Info")
+
     def action_previous_article(self) -> None:
         """Open previous article."""
         self.last_key = "k"
@@ -684,8 +734,15 @@ class ttcli(App):
 
     def action_readwise_article_url(self) -> None:
         """Add one article link to later app."""
-        if hasattr(self, 'current_article_url') and self.current_article_urls: 
-            self.push_screen(LinkSelectionScreen(links=[(self.current_article_title, self.current_article_url)], open_links="readwise"))
+        if hasattr(self, 'current_article_url') and self.current_article_urls:
+            self.push_screen(screen=LinkSelectionScreen(links=self.current_article_urls, open_links="readwise"))
+        else:
+            self.notify(title="Readwise", message="No article selected or no URLs available.", timeout=5, severity="warning")
+
+    def action_readwise_article_url_and_open(self) -> None:
+        """Add one article link to later app."""
+        if hasattr(self, 'current_article_url') and self.current_article_urls:
+            self.push_screen(screen=LinkSelectionScreen(links=self.current_article_urls, open_links="readwise", open=True))
         else:
             self.notify(title="Readwise", message="No article selected or no URLs available.", timeout=5, severity="warning")
 
@@ -717,6 +774,12 @@ class ttcli(App):
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""
         self.theme = "textual-dark" if self.theme == "textual-light" else "textual-light"
+
+    async def action_toggle_header(self) -> None:
+        """Toggle header info for article."""
+        self.show_header = not self.show_header
+        client.mark_unread(article_id=self.current_article.id) # type: ignore
+        await self.display_article_content(article_id=self.current_article.id) # type: ignore
 
     async def action_toggle_feeds(self) -> None:
         """Toggle feed grouping."""
@@ -778,21 +841,24 @@ class ttcli(App):
                 article: Article = articles[0]
             except Exception:
                 print(f"No article found with ID {article_id}")
-                print(f"Articles: {articles}")
-            
-            print(dir(article))
+
+            self.current_article = article
 
             # Parse and clean the HTML
             soup = BeautifulSoup(markup=article.content, features="html.parser") # type: ignore
             self.current_article_url: str = self.get_clean_url(url=article.link) # type: ignore
             self.current_article_title: str = article.title # type: ignore
-            
+
             # Add document urls to list
             self.current_article_urls = []
             for a in soup.find_all(name="a"):
                 self.current_article_urls.append((a.get_text(), self.get_clean_url(url=a['href']))) # type: ignore
 
             self.content_markdown: str = markdownify(html=str(object=soup)).replace('xml encoding="UTF-8"', "")
+
+            header: str = self.get_header(article=article)
+
+            self.content_markdown = header + self.content_markdown
 
             # Display the cleaned content
             content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
@@ -814,16 +880,45 @@ class ttcli(App):
         else:
             return url
 
+    def get_header(self, article: Article) -> str:
+        """Get header info for article."""
+        header: str = ""
+        if self.show_header:
+            header = f"> **Title:** {self.current_article_title}  \n"
+            header += f"> **URL:** {self.current_article_url}  \n"
+            if hasattr(article, "author") and article.author: # type: ignore
+                header += f"> **Author:** {article.author}  \n" # type: ignore
+            if hasattr(article, "published") and article.published: # type: ignore
+                header += f"> **Published:** {article.published}  \n" # type: ignore
+            if hasattr(article, "updated") and article.updated:
+                header += f"> **Updated:** {article.updated}  \n" # type: ignore
+            if hasattr(article, "note") and article.note: # type: ignore
+                header += f"> **Note:** {article.note}  \n" if article.note else "" # type: ignore
+            if hasattr(article, "feed_title") and article.feed_title: # type: ignore
+                header += f"> **Feed:** {article.feed_title}  \n" if article.feed_title else "" # type: ignore
+            try:
+                header += f"> **Tags:** {", ".join(self.tags[article.id])}  \n" if self.tags[article.id] else "" # type: ignore
+            except KeyError:
+                pass
+            if hasattr(article, "tags") and article.tags: # type: ignore
+                header += f"> **Tags:** {article.tags}  \n" if article.tags else "" # type: ignore
+            if hasattr(article, "lang") and article.lang: # type: ignore
+                header += f"> **Language:** {article.lang}  \n" if article.lang else "" # type: ignore
+            if hasattr(article, "marked") and article.marked: # type: ignore
+                header += f"> **Starred:** {article.marked}  \n" if article.marked else "" # type: ignore
+            header += "  \n"
+        return header
+
     async def refresh_articles(self, show_id=None) -> None:
         """Load articles from selected category or all articles."""
         article_ids: list[str] = []
 
-        if self.show_special_categories:
-            view_mode = 'all_articles'
-        else:
-            view_mode = 'unread' if self.show_unread_only else 'all_articles'
+        view_mode: Literal['all_articles'] | Literal['unread'] = 'all_articles' if self.show_special_categories else 'unread'
 
         # Determine if the selected item is a category or feed
+        # Show all articles by default
+        feed_id = -4
+        is_cat = False
         if not isinstance(show_id, int) and not show_id is None and show_id.startswith("feed_"):
             # We have a feed ID
             feed_id: int = int(show_id.replace("feed_", ""))
@@ -832,19 +927,17 @@ class ttcli(App):
             # We have a category ID
             feed_id = show_id
             is_cat = True
-        else:
-            # Show all articles
-            feed_id = -4
-            is_cat = False
 
         # Clear the article list view
         list_view: ListView = self.query_one(selector="#articles", expect_type=ListView)
         await list_view.clear()
-        
+
         try:
             articles: list[Headline] = client.get_headlines(feed_id=feed_id, is_cat=is_cat, view_mode=view_mode)
             feed_title: str = ""
             for article in articles:
+                self.tags[article.id] = article.tags # type: ignore
+                prepend: str = ""
                 if self.group_feeds and article.feed_title not in [feed_title, ""]: # type: ignore
                     article_id: str = f"ft_{article.feed_id}" # type: ignore
                     feed_title = html.unescape(article.feed_title.strip()) # type: ignore
@@ -858,7 +951,15 @@ class ttcli(App):
                     article_id = f"art_{article.id}" # type: ignore
                     if article_id not in article_ids:
                         style: str = "bold" if article.unread else "none" # type: ignore
-                        article_title: str = html.unescape(article.title.strip()) # type: ignore
+                        if article.note or article.published or article.marked: # type: ignore
+                            prepend = "("
+                            prepend += "N" if article.note else "" # type: ignore
+                            if article.published: # type: ignore
+                                prepend += "P" if prepend == "(" else ", P"
+                            if article.marked: # type: ignore
+                                prepend += "S" if prepend == "(" else ", S"
+                            prepend += ") "
+                        article_title: str = html.unescape(prepend + article.title.strip()) # type: ignore
                         article_title_item = ListItem(Static(content=article_title), id=article_id)
                         article_title_item.styles.text_style = style
                         list_view.append(item=article_title_item)
@@ -867,7 +968,7 @@ class ttcli(App):
                 await self.action_clear()
         except Exception as err:
             print(f"Error fetching articles: {err}")
-    
+
     async def refresh_categories(self) -> None:
         """Load categories from TTRSS and filter based on unread-only mode."""
         existing_ids: list[str] = []
