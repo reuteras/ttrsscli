@@ -48,7 +48,7 @@ jobs:
 
     environment:
       name: pypi
-      url: https://pypi.org/project/YOURPROJECT/${{ github.event.release.name }}
+      url: https://pypi.org/project/ttrsscli/${{ github.event.release.name }}
 
     steps:
       - name: Retrieve release distributions
