@@ -8,6 +8,7 @@ import webbrowser
 from collections import OrderedDict
 from collections.abc import Generator
 from datetime import datetime
+from time import sleep
 from typing import Any, ClassVar, Literal
 from urllib.parse import quote
 
@@ -84,6 +85,17 @@ def handle_session_expiration(api_method):
     def wrapper(self, *args, **kwargs) -> Any:
         try:
             return api_method(self, *args, **kwargs)
+        except ConnectionResetError as err:
+            if "ConnectionResetError" in str(object=err):
+                sleep(1)
+                # Re-login
+                if not self.login():
+                    raise RuntimeError("Re-authentication failed") from err
+
+                # Retry the original function call
+                return api_method(self, *args, **kwargs)
+
+            raise err
         except Exception as err:
             if "NOT_LOGGED_IN" in str(object=err):
 
@@ -203,11 +215,15 @@ try:
     obsidian_vault: str = config["obsidian"].get("vault", "")
     obsidian_folder: str = config["obsidian"].get("folder", "")
     obsidian_default_tag: str = config["obsidian"].get("default_tag", "")
+    obsidian_include_tags: bool = config["obsidian"].get("include_tags", False)
+    obsidian_include_labels: bool = config["obsidian"].get("include_labels", True)
     template: str = config["obsidian"].get("template", "")
 except KeyError:
     obsidian_vault = ""
-    obsidian_folder = ""
+    obsidian_folder = "News"
     obsidian_default_tag = ""
+    obsidian_include_tags = False
+    obsidian_include_labels = True
     template = ""
     print("Warning: No Obsidian configuration found. Add 'vault' and 'template' to the 'obsidian' section of your config.toml.")
 
@@ -617,39 +633,46 @@ class ttcli(App):
         """Send the current content as a new note to Obsidian via URI scheme."""
         # Documentation for Obsidian URI scheme: https://help.obsidian.md/Extending+Obsidian/Obsidian+URI
 
-        # Check if Obsidian vault name is set
-        if not obsidian_vault:
-            self.notify(message="No Obsidian vault name found in config.toml.", title="Error")
-        else:
-            title: str = datetime.now().strftime(format="%Y%m%d%H%M ") + self.current_article_title if self.current_article_title else datetime.now().strftime(format="%Y-%m-%d %H:%M:%S")
-            title = title.replace(":", "-").replace("/", "-").replace("\\", "-")
-            if obsidian_folder:
-                title = obsidian_folder + "/" + title
-            content: str = template.replace("<URL>", self.current_article_url)
-            content = content.replace("<ID>", datetime.now().strftime(format="%Y%m%d%H%M "))
-            content = content.replace("<CONTENT>", self.content_markdown)
-            content = content.replace("<TITLE>", self.current_article_title)
-            # TODO: Support tags from Tiny Tiny RSS
-            if self.show_header:
-                try:
-                    tags: str = "\n".join(f"  - {item}  " for item in self.tags[self.current_article.id]) # type: ignore
-                except KeyError:
-                    tags = ""
-                tags = obsidian_default_tag + "\n" + tags
-                content = content.replace("<TAGS>", tags)
-            else:
-                content = content.replace("<TAGS>", obsidian_default_tag)
-            # Encode title and content for URL format
-            encoded_title: str = quote(string=title).replace("/", "%2F")
-            encoded_content: str = quote(string=content)
+        # Title for the note
+        title: str = datetime.now().strftime(format="%Y%m%d%H%M ") + self.current_article_title if self.current_article_title else datetime.now().strftime(format="%Y-%m-%d %H:%M:%S")
+        title = title.replace(":", "-").replace("/", "-").replace("\\", "-")
+        if obsidian_folder:
+            title = obsidian_folder + "/" + title
+        
+        # Use template to create note content
+        content: str = template.replace("<URL>", self.current_article_url)
+        content = content.replace("<ID>", datetime.now().strftime(format="%Y%m%d%H%M "))
+        content = content.replace("<CONTENT>", self.content_markdown_original)
+        content = content.replace("<TITLE>", self.current_article_title)
+        tags = obsidian_default_tag + "  \n"
+        article_labels = ""
+        article_tags = ""
+        if self.show_header and obsidian_include_labels:
+            try:
+                article_labels: str = f"  - {", ".join(item[1] for item in self.current_article.labels)}" # type: ignore
+            except AttributeError:
+                article_labels = ""
+        if self.show_header and obsidian_include_tags:
+            try:
+                article_tags: str = "\n".join(f"  - {item}" for item in self.tags[self.current_article.id]) # type: ignore
+            except KeyError:
+                article_tags = ""
+        tags += article_labels + article_tags
+        content = content.replace("<TAGS>", tags)
+        content = content.replace("  - \n", "")
+        content = content.replace("\n\n", "\n")
 
-            # Construct the Obsidian URI
-            obsidian_uri: str = f"obsidian://new?vault={obsidian_vault}&file={encoded_title}&content={encoded_content}"
+        # Encode title and content for URL format
+        encoded_title: str = quote(string=title).replace("/", "%2F")
+        encoded_content: str = quote(string=content)
 
-            # Open the Obsidian URI (this will create or update the note)
-            webbrowser.open(url=obsidian_uri)
+        # Construct the Obsidian URI
+        obsidian_uri: str = f"obsidian://new?vault={obsidian_vault}&file={encoded_title}&content={encoded_content}"
 
-            self.notify(message=f"Sent to Obsidian: {title}", title="Export Successful")
+        # Open the Obsidian URI (this will create or update the note)
+        webbrowser.open(url=obsidian_uri)
+
+        self.notify(message=f"Sent to Obsidian: {title}", title="Export Successful")
 
     def action_focus_next_pane(self) -> None:
         """Move focus to the next pane."""
@@ -840,7 +863,7 @@ class ttcli(App):
             try:
                 article: Article = articles[0]
             except Exception:
-                print(f"No article found with ID {article_id}")
+                self.notify(title="Article", message=f"No article found with ID {article_id}.", timeout=5, severity="error")
 
             self.current_article = article
 
@@ -854,11 +877,11 @@ class ttcli(App):
             for a in soup.find_all(name="a"):
                 self.current_article_urls.append((a.get_text(), self.get_clean_url(url=a['href']))) # type: ignore
 
-            self.content_markdown: str = markdownify(html=str(object=soup)).replace('xml encoding="UTF-8"', "")
+            self.content_markdown_original: str = markdownify(html=str(object=soup)).replace('xml encoding="UTF-8"', "")
 
             header: str = self.get_header(article=article)
 
-            self.content_markdown = header + self.content_markdown
+            self.content_markdown = header + self.content_markdown_original
 
             # Display the cleaned content
             content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
@@ -896,10 +919,17 @@ class ttcli(App):
                 header += f"> **Note:** {article.note}  \n" if article.note else "" # type: ignore
             if hasattr(article, "feed_title") and article.feed_title: # type: ignore
                 header += f"> **Feed:** {article.feed_title}  \n" if article.feed_title else "" # type: ignore
-            try:
-                header += f"> **Tags:** {", ".join(self.tags[article.id])}  \n" if self.tags[article.id] else "" # type: ignore
-            except KeyError:
-                pass
+            if article.labels:
+                try:
+                    header += f"> **Labels:** {", ".join(item[1] for item in article.labels)}  \n" # type: ignore
+                except AttributeError:
+                    pass
+            if self.tags[article.id]: # type: ignore
+                try:
+                    self.notify(title="Tags", message=f"Tags: {type(self.tags[article.id][0])}", timeout=5)
+                    header += f"> **Tags:** {", ".join(self.tags[article.id])}  \n" if len(self.tags[article.id][0]) > 0 else "" # type: ignore
+                except KeyError:
+                    pass
             if hasattr(article, "tags") and article.tags: # type: ignore
                 header += f"> **Tags:** {article.tags}  \n" if article.tags else "" # type: ignore
             if hasattr(article, "lang") and article.lang: # type: ignore
