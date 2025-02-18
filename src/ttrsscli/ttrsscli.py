@@ -391,7 +391,7 @@ class HelpScreen(Screen):
     def compose(self) -> ComposeResult:
         """Define the content layout of the help screen."""
         yield LinkableMarkdownViewer(
-            markdown="""# Help for ttcli
+            markdown="""# Help for ttrsscli
 ## Navigation
 - **j / k / n**: Navigate articles
 - **J / K**: Navigate categories
@@ -429,7 +429,7 @@ class HelpScreen(Screen):
 
 ## Links
 
-Project home: [https://github.com/reuteras/ttcli](https://github.com/reuteras/ttcli)
+Project home: [https://github.com/reuteras/ttrsscli](https://github.com/reuteras/ttrsscli)
 
 For more about Tiny Tiny RSS, see the [Tiny Tiny RSS website](https://tt-rss.org/). Tiny Tiny RSS is not affiliated with this project.
 """,
@@ -439,7 +439,7 @@ For more about Tiny Tiny RSS, see the [Tiny Tiny RSS website](https://tt-rss.org
         )
 
 # Main Textual App class
-class ttcli(App):
+class ttrsscli(App):
     """A Textual app to access and read articles from Tiny Tiny RSS."""
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("?", "toggle_help", "Help"),
@@ -480,7 +480,7 @@ class ttcli(App):
         "help": HelpScreen,
     }
     CSS_PATH: str = "styles.tcss"
-    START_TEXT: str = "Welcome to ttcli TUI! A text-based interface to Tiny Tiny RSS."
+    START_TEXT: str = "Welcome to ttrsscli TUI! A text-based interface to Tiny Tiny RSS."
 
     # State variables
 
@@ -519,7 +519,7 @@ class ttcli(App):
 
     def compose(self) -> ComposeResult:
         """Compose the three pane layout."""
-        yield Header(show_clock=True, name="ttcli")
+        yield Header(show_clock=True, name="ttrsscli")
         with Horizontal():
             yield ListView(id="categories")
             with Vertical():
@@ -1059,7 +1059,7 @@ class ttcli(App):
         list_view.styles.width = estimated_width
 
 def main() -> None:
-    """Run the ttcli app."""
+    """Run the ttrsscli app."""
     # Use argparse and to add arguments
     arg_parser = argparse.ArgumentParser(description="A Textual app to access and read articles from Tiny Tiny RSS.")
     arg_parser.add_argument("--config", help="Path to the config file")
@@ -1068,9 +1068,9 @@ def main() -> None:
     # Load the config file
     config_file: str = args.config if args.config else "config.toml"
     
-    app = ttcli()
+    app = ttrsscli()
     app.run()
 
 if __name__ == "__main__":
-    app = ttcli()
+    app = ttrsscli()
     app.run()

@@ -1,8 +1,8 @@
-# ttcli - A CLI Tool for Tiny Tiny RSS
+# ttrsscli - A CLI Tool for Tiny Tiny RSS
 
 **This has been a sample project for me to use AI to create an app.** The initial version with limited functionality was created with OpenAI but it been rewritten by me even though I have used AI to help me with some parts of the code. Especially parts with textual since it is a new library for me.
 
-`ttcli` is a terminal-based application that provides a text user interface (TUI) for reading articles from a [Tiny Tiny RSS](https://tt-rss.org/) instance. Built using [Textual](https://github.com/Textualize/textual), `ttcli` allows users to navigate and read their RSS feeds efficiently from the command line.
+`ttrsscli` is a terminal-based application that provides a text user interface (TUI) for reading articles from a [Tiny Tiny RSS](https://tt-rss.org/) instance. Built using [Textual](https://github.com/Textualize/textual), `ttrsscli` allows users to navigate and read their RSS feeds efficiently from the command line.
 
 ## Features
 
@@ -29,7 +29,7 @@
 Checkout and install requirements.
 
 ```sh
-git clone https://github.com/reuteras/ttcli.git && cd ttcli
+git clone https://github.com/reuteras/ttrsscli.git && cd ttrsscli
 uv sync
 source .venv/bin/activate
 ```
@@ -46,10 +46,10 @@ password = "your_password"  # Or "op read op://Private/ttrss/password --no-newli
 
 ## Running
 
-Start `ttcli`.
+Start `ttrsscli`.
 
 ```sh
-textual run ttcli
+uv run ttrsscli
 ```
 
 ## Keyboard Shortcuts
@@ -97,7 +97,7 @@ This project is licensed under the MIT License.
 
 ## Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to open an issue or submit a pull request on [GitHub](https://github.com/reuteras/ttcli).
+Contributions, issues, and feature requests are welcome! Feel free to open an issue or submit a pull request on [GitHub](https://github.com/reuteras/ttrsscli).
 
 ## Author
 

@@ -1,5 +1,5 @@
 [project]
-name = "ttcli"
+name = "ttrsscli"
 version = "0.0.4"
 authors = [
   { name="Peter Reuterås", email="peter@reuteras.net" },
@@ -24,11 +24,12 @@ dependencies = [
     "ttrss-python",
 ]
 [project.scripts]
-ttcli = "ttcli:main"
+ttcli = "ttrsscli:main"
+ttrsscli = "ttrsscli:main"
 
 [project.urls]
-Homepage = "https://github.com/reuteras/ttcli"
-Issues = "https://github.com/reuteras/ttcli/issues"
+Homepage = "https://github.com/reuteras/ttrsscli"
+Issues = "https://github.com/reuteras/ttrsscli/issues"
 
 [build-system]
 requires = ["hatchling"]

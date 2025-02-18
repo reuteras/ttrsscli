@@ -1237,7 +1237,15 @@ wheels = [
 ]
 
 [[package]]
-name = "ttcli"
+name = "ttrss-python"
+version = "0.5"
+source = { git = "https://github.com/Vassius/ttrss-python.git?rev=master#3d2d26dd3b74ee65bce190d15801aae755b1e2db" }
+dependencies = [
+    { name = "requests" },
+]
+
+[[package]]
+name = "ttrsscli"
 version = "0.0.4"
 source = { editable = "." }
 dependencies = [
@@ -1277,14 +1285,6 @@ dev = [
     { name = "pylint", specifier = ">=3.3.4" },
     { name = "ruff", specifier = ">=0.9.5" },
     { name = "textual-dev", specifier = ">=1.7.0" },
-]
-
-[[package]]
-name = "ttrss-python"
-version = "0.5"
-source = { git = "https://github.com/Vassius/ttrss-python.git?rev=master#3d2d26dd3b74ee65bce190d15801aae755b1e2db" }
-dependencies = [
-    { name = "requests" },
 ]
 
 [[package]]
