@@ -1,4 +1,5 @@
 """Command line tool to access Tiny Tiny RSS."""
+import argparse
 import functools
 import html
 import os
@@ -42,7 +43,7 @@ from urllib3.exceptions import NameResolutionError
 
 
 class LimitedSizeDict(OrderedDict):
-    """A dictionary that holds at most `max_size` items and removes the oldest when full."""
+    """A dictionary that holds at most 'max_size' items and removes the oldest when full."""
 
     def __init__(self, max_size: int) -> None:
         """Initialize the LimitedSizeDict."""
@@ -52,10 +53,11 @@ class LimitedSizeDict(OrderedDict):
     def __setitem__(self, key, value) -> None:
         """Set an item in the dictionary, removing the oldest if full."""
         if key in self:
-            self.move_to_end(key)
+            self.move_to_end(key=key)
         super().__setitem__(key, value)
         if len(self) > self.max_size:
             self.popitem(last=False)
+
 
 # Helper function to retrieve credentials from 1Password CLI or return the value directly
 def get_conf_value(op_command) -> str:
@@ -94,8 +96,6 @@ def handle_session_expiration(api_method):
 
                 # Retry the original function call
                 return api_method(self, *args, **kwargs)
-
-            raise err
         except Exception as err:
             if "NOT_LOGGED_IN" in str(object=err):
 
@@ -105,10 +105,9 @@ def handle_session_expiration(api_method):
 
                 # Retry the original function call
                 return api_method(self, *args, **kwargs)
-
             raise err
-
     return wrapper
+
 
 class TTRSSClient:
     """A wrapper for ttrss-python to reauthenticate on failure."""
@@ -269,9 +268,17 @@ class LinkSelectionScreen(ModalScreen):
             yield Label(renderable="Select a link to download (ESC to go back):")
         elif self.open_links == "readwise":
             yield Label(renderable="Select a link to save to Readwise (ESC to go back):")
-        yield ListView(
+        link_select = ListView(
             *[ListItem(Label(renderable=f"{link[0]}\n{link[1]}")) for link in self.links]
         )
+        # Longest link title or link URL
+        longest_link: int = 0
+        for link in self.links:
+            longest_link = max(longest_link, len(link[0]), len(link[1]))
+        link_select.styles.align_horizontal = "left"
+        link_select.styles.width = longest_link + 5
+        link_select.styles.max_width = "100%"
+        yield link_select
 
     def download_file(self, link: str) -> None:
         """Download a file from the given URL and save to download folder."""
@@ -284,7 +291,6 @@ class LinkSelectionScreen(ModalScreen):
         if httpx_response.status_code == httpx.codes.OK:
             try:
                 filename: str = httpx_response.url.path.split(sep="/")[-1]
-                print(f"Filename: {filename}")
             except Exception:
                 filename = "index.dat"
             filename = "index.dat" if filename == "" else filename
@@ -589,23 +595,19 @@ class ttcli(App):
     def action_add_to_later_app(self, open=False) -> None:
         """Add article to later app."""
         if not readwise_token:
-            print("No Readwise token found.")
             self.notify(title="Readwise", message="No Readwise token found.", timeout=5, severity="warning")
         elif hasattr(self, 'current_article_url') and self.current_article_url:
             try:
                 response: tuple[bool, PostResponse] = readwise.save_document(url=self.current_article_url)
             except Exception as err:
-                print(f"Error saving article to Readwise: {err}")
+                self.notify(title="Readwise", message=f"Error saving url {self.current_article_url}. Error {err}", timeout=5, severity="error")
             if response[1].url and response[1].id:
-                print("Article saved to Readwise.")
                 self.notify(title="Readwise", message=f"Url {self.current_article_url} saved.", timeout=5)
                 if open:
                     webbrowser.open(url=response[1].url)
             else:
-                print("Error saving article to Readwise.")
                 self.notify(title="Readwise", message=f"Error saving url {self.current_article_url}.", timeout=5, severity="error")
         else:
-            print("No article selected or no URL available.")
             self.notify(title="Readwise", message="No article selected or no URL available.", timeout=5, severity="warning")
 
     def action_add_to_later_app_and_open(self) -> None:
@@ -722,7 +724,7 @@ class ttcli(App):
         if hasattr(self, 'current_article_url') and self.current_article_url:
             webbrowser.open(self.current_article_url)
         else:
-            print("No article selected or no URL available.")
+            self.notify(message="No article selected or no URL available.", title="Info")
 
     async def action_open_article_url(self):
         """Open links from the article in a web browser."""
@@ -821,7 +823,7 @@ class ttcli(App):
         if hasattr(self, 'article_id') and self.article_id:
             client.toggle_unread(article_id=self.article_id)
         else:
-            print("No article selected or no article_id available.")
+            self.notify(title="Article", message="No article selected or no article_id available.", timeout=5, severity="error")
 
     async def action_toggle_special_categories(self) -> None:
         """Toggle special categories."""
@@ -836,7 +838,7 @@ class ttcli(App):
         if hasattr(self, 'article_id') and self.article_id:
             client.toggle_starred(article_id=self.article_id)
         else:
-            print("No article selected or no article_id available")
+            self.notify(title="Article", message="No article selected or no article_id available.", timeout=5, severity="error")
 
     async def action_toggle_unread(self) -> None:
         """Toggle unread-only mode and update category labels."""
@@ -857,7 +859,7 @@ class ttcli(App):
             # Fetch the full article
             articles: list[Article] = client.get_articles(article_id=article_id)
         except Exception as err:
-            print(f"Error fetching article content: {err}")
+            self.notify(title="Article", message=f"Error fetching article content: {err}", timeout=5, severity="error")
 
         if articles:
             try:
@@ -889,8 +891,6 @@ class ttcli(App):
 
             client.mark_read(article_id=article_id)
             await self.refresh_categories()
-        else:
-            print(f"No article found with ID {article_id}")
 
     def get_clean_url(self, url: str) -> str:
         """Clear url."""
@@ -919,17 +919,15 @@ class ttcli(App):
                 header += f"> **Note:** {article.note}  \n" if article.note else "" # type: ignore
             if hasattr(article, "feed_title") and article.feed_title: # type: ignore
                 header += f"> **Feed:** {article.feed_title}  \n" if article.feed_title else "" # type: ignore
-            if article.labels:
-                try:
-                    header += f"> **Labels:** {", ".join(item[1] for item in article.labels)}  \n" # type: ignore
-                except AttributeError:
-                    pass
-            if self.tags[article.id]: # type: ignore
-                try:
-                    self.notify(title="Tags", message=f"Tags: {type(self.tags[article.id][0])}", timeout=5)
-                    header += f"> **Tags:** {", ".join(self.tags[article.id])}  \n" if len(self.tags[article.id][0]) > 0 else "" # type: ignore
-                except KeyError:
-                    pass
+            try:
+                header += f"> **Labels:** {", ".join(item[1] for item in article.labels) if article.labels else ""}  \n" # type: ignore
+            except AttributeError:
+                pass
+            try:
+                self.notify(title="Tags", message=f"Tags: {type(self.tags[article.id][0])}", timeout=5) # type: ignore
+                header += f"> **Tags:** {", ".join(self.tags[article.id])}  \n" if len(self.tags[article.id][0]) > 0 else "" # type: ignore
+            except KeyError:
+                pass
             if hasattr(article, "tags") and article.tags: # type: ignore
                 header += f"> **Tags:** {article.tags}  \n" if article.tags else "" # type: ignore
             if hasattr(article, "lang") and article.lang: # type: ignore
@@ -997,7 +995,7 @@ class ttcli(App):
             if not articles:
                 await self.action_clear()
         except Exception as err:
-            print(f"Error fetching articles: {err}")
+            self.notify(title="Articles", message=f"Error fetching articles: {err}", timeout=5, severity="error")
 
     async def refresh_categories(self) -> None:
         """Load categories from TTRSS and filter based on unread-only mode."""
@@ -1062,6 +1060,14 @@ class ttcli(App):
 
 def main() -> None:
     """Run the ttcli app."""
+    # Use argparse and to add arguments
+    arg_parser = argparse.ArgumentParser(description="A Textual app to access and read articles from Tiny Tiny RSS.")
+    arg_parser.add_argument("--config", help="Path to the config file")
+    args = arg_parser.parse_args()
+
+    # Load the config file
+    config_file: str = args.config if args.config else "config.toml"
+    
     app = ttcli()
     app.run()
 

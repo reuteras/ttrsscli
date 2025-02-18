@@ -1,6 +1,6 @@
 # ttcli - A CLI Tool for Tiny Tiny RSS
 
-**This has been a sample project for me to use AI to create an app.**
+**This has been a sample project for me to use AI to create an app.** The initial version with limited functionality was created with OpenAI but it been rewritten by me even though I have used AI to help me with some parts of the code. Especially parts with textual since it is a new library for me.
 
 `ttcli` is a terminal-based application that provides a text user interface (TUI) for reading articles from a [Tiny Tiny RSS](https://tt-rss.org/) instance. Built using [Textual](https://github.com/Textualize/textual), `ttcli` allows users to navigate and read their RSS feeds efficiently from the command line.
 
@@ -18,10 +18,11 @@
 ## Installation
 
 ### Prerequisites
+
 - Python 3.11+
 - Tiny Tiny RSS instance
 - `uv` for dependency installation
-- (Optional) [1Password CLI](https://developer.1password.com/docs/cli) for secure credential management
+- (Optional) [1Password CLI](https://developer.1password.com/docs/cli) for secure credential and configuration management
 
 ### Install Dependencies
 
@@ -48,29 +49,46 @@ password = "your_password"  # Or "op read op://Private/ttrss/password --no-newli
 Start `ttcli`.
 
 ```sh
-textual run ttcli.py
+textual run ttcli
 ```
 
 ## Keyboard Shortcuts
 
 ```sh
-| Key                   | Action                         |
-|-----------------------|--------------------------------|
-| `?` / `h` / `H`       | Show help screen               |
-| `c`                   | Clear content pane             |
-| `e`                   | Expand/collapse categories     |
-| `g`                   | Toggle group feeds             |
-| `j` / `k`             | Navigate articles              |
-| `J` / `K`             | Navigate categories            |
-| `m`                   | Maximize pane                  |
-| `M`                   | Minimize pane                  |
-| `o`                   | Open article in browser        |
-| `r`                   | Mark read/unread               |
-| `s`                   | Star/unstar article            |
-| `u`                   | Toggle unread categories only  |
-| `,`                   | Refresh feeds                  |
-| `tab` / `shift+tab`   | Switch between panes           |
-| `q`                   | Quit application               |
+## Navigation
+- **j / k / n**: Navigate articles
+- **J / K**: Navigate categories
+- **Arrow keys**: Up and down in current pane
+- **tab / shift+tab**: Navigate panes
+
+## General keys
+- **h / ?**: Show this help
+- **q**: Quit
+- **G / ,**: Refresh
+- **c**: Clear content in article pane
+- **d**: Toggle dark and light mode
+
+## Article keys
+- **H**: Toggle "header" (info) for article
+- **l**: Add article to Readwise
+- **L**: Add article to Readwise and open that Readwise page in browser
+- **M**: View markdown source for article
+- **m**: Maximize content pane (ESC to minimize)
+- **r**: Toggle read/unread
+- **s**: Star article
+- **O**: Export markdown to Obsidian
+- **o**: Open article in browser
+- **ctrl+l**: Open list with links in article, selected link is sent to Readwise
+- **ctrl+L**: Open list with links in article, selected link is sent to Readwise and opened in browser
+- **ctrl+o**: Open list with links in article, selected link opens in browser
+- **ctrl+s**: Save selected link from article to download folder
+
+## Category and feed keys
+- **e**: Toggle expand category
+- **g**: Toggle group articles to feed
+- **R**: Open recently read articles
+- **S**: Show special categories
+- **u**: Show all categories (include unread)
 ```
 
 ## License
@@ -90,7 +108,7 @@ Developed by [reuteras](https://github.com/reuteras).
 Some thoughts are listed below:
 
 - Implement more functions from the [Python API] https://github.com/Vassius/ttrss-python/blob/master/ttrss/client.py). For example add and remove feeds.
-- Should a use [timer]( https://textual.textualize.io/api/timer/) to check that updater is running and indicate it?
-- Add code for [testing](https://textual.textualize.io/guide/testing/)?
-- Switch to rich [markdown](https://rich.readthedocs.io/en/stable/markdown.html)
+- Should the tool use a [timer]( https://textual.textualize.io/api/timer/) to check that updater is running and indicate it at regular intervals?
+- Add code for [testing](https://textual.textualize.io/guide/testing/).
+- Switch to rich [markdown](https://rich.readthedocs.io/en/stable/markdown.html) to get more features and later images (see below).
 - Add support for [images](https://github.com/Textualize/textual/discussions/4345) via [rich-pixels](https://github.com/darrenburns/rich-pixels)
