@@ -60,7 +60,7 @@ class LimitedSizeDict(OrderedDict):
 
 
 # Helper function to retrieve credentials from 1Password CLI or return the value directly
-def get_conf_value(op_command) -> str:
+def get_conf_value(op_command: str) -> str:
     """Get the configuration value."""
     if op_command.startswith("op "):
         try:
@@ -168,85 +168,50 @@ class TTRSSClient:
         self.api.toggle_unread(article_id=article_id)
 
 
-# Load configuration
-try:
-    config: dict[str, Any] = toml.load(f="config.toml")
-except (FileNotFoundError, toml.TomlDecodeError) as err:
-    print(f"Error reading configuration file: {err}")
-    sys.exit(1)
+class Configuration:
+    """A class to handle configuration values."""
+    def __init__(self, arguments) -> None:
+        """Initialize the configuration."""
+        # Use argparse and to add arguments
+        arg_parser = argparse.ArgumentParser(description="A Textual app to access and read articles from Tiny Tiny RSS.")
+        arg_parser.add_argument("--config", dest="config", help="Path to the config file", default="config.toml")
+        args: argparse.Namespace = arg_parser.parse_args(args=arguments)
 
-# Get TTRSS configuration values
-try:
-    api_url: str = get_conf_value(op_command=config["ttrss"].get("api_url", ""))
-    username: str = get_conf_value(op_command=config["ttrss"].get("username", ""))
-    password: str = get_conf_value(op_command=config["ttrss"].get("password", ""))
-except KeyError as err:
-    print(f"Error reading configuration: {err}")
-    sys.exit(1)
+        self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
+        try:
+            self.api_url: str = get_conf_value(op_command=self.config["ttrss"].get("api_url", ""))
+            self.username: str = get_conf_value(op_command=self.config["ttrss"].get("username", ""))
+            self.password: str = get_conf_value(op_command=self.config["ttrss"].get("password", ""))
+            self.download_folder: str = get_conf_value(op_command=self.config["general"].get("download_folder", ""))
+            self.readwise_token: str = get_conf_value(op_command=self.config["readwise"].get("token", ""))
+            self.obsidian_vault: str = get_conf_value(op_command=self.config["obsidian"].get("vault", ""))
+            self.obsidian_folder: str = get_conf_value(op_command=self.config["obsidian"].get("folder", ""))
+            self.obsidian_default_tag: str = get_conf_value(op_command=self.config["obsidian"].get("default_tag", ""))
+            self.obsidian_include_tags: bool = self.config["obsidian"].get("include_tags", "False")
+            self.obsidian_include_labels: bool = self.config["obsidian"].get("include_labels", "True")
+            self.obsidian_template: str = get_conf_value(op_command=self.config["obsidian"].get("template", ""))
+        except KeyError as err:
+            print(f"Error reading configuration: {err}")
+            sys.exit(1)
 
-# Get download folder
-try:
-    download_folder: str = get_conf_value(op_command=config["general"].get("download_folder", ""))
-except KeyError:
-    download_folder = ""
-    print("Warning: No download folder found. Add 'download_folder' to the 'general' section of your config.toml.")
-
-# Check for missing configuration values
-if not api_url or not username or not password:
-    print("Error: Missing configuration values. Check your config.toml.")
-    sys.exit(1)
-
-# Check for Readwise token (optional)
-try:
-    readwise_token: str = get_conf_value(op_command=config["readwise"].get("token", ""))
-    if readwise_token:
-        os.environ["READWISE_TOKEN"] = readwise_token
-        import readwise
-        from readwise.model import PostResponse
-except KeyError:
-    print("Warning: No Readwise token found. Add 'token' to the 'readwise' section of your config.toml.")
-except Exception as err:
-    print(f"Error reading Readwise token: {err}")
-    sys.exit(1)
-
-# Check for Obsidian configuration (optional)
-try:
-    obsidian_vault: str = config["obsidian"].get("vault", "")
-    obsidian_folder: str = config["obsidian"].get("folder", "")
-    obsidian_default_tag: str = config["obsidian"].get("default_tag", "")
-    obsidian_include_tags: bool = config["obsidian"].get("include_tags", False)
-    obsidian_include_labels: bool = config["obsidian"].get("include_labels", True)
-    template: str = config["obsidian"].get("template", "")
-except KeyError:
-    obsidian_vault = ""
-    obsidian_folder = "News"
-    obsidian_default_tag = ""
-    obsidian_include_tags = False
-    obsidian_include_labels = True
-    template = ""
-    print("Warning: No Obsidian configuration found. Add 'vault' and 'template' to the 'obsidian' section of your config.toml.")
+    def load_config_file(self, config_file: str) -> dict[str, Any]:
+        """Load the configuration from the TOML file."""
+        try:
+            return toml.load(f=config_file)
+        except (FileNotFoundError, toml.TomlDecodeError) as err:
+            print(f"Error reading configuration file: {err}")
+            sys.exit(1)
 
 
 # Shared constants
 ALLOW_IN_FULL_SCREEN: list[str] = ["arrow_up", "arrow_down", "page_up", "page_down", "down", "up", "right", "left", "enter"]
 
 
-# Connect to TTRSS
-try:
-    client = TTRSSClient(url=api_url, username=username, password=password)
-except TTRNotLoggedIn:
-    print("Error: Could not log in to Tiny Tiny RSS. Check your credentials.")
-    sys.exit(1)
-except NameResolutionError:
-    print("Error: Couldn't look up server for url.")
-    sys.exit(1)
-
-
 # Textual Screen classes
 class LinkSelectionScreen(ModalScreen):
     """Modal screen to show extracted links and allow selection."""
 
-    def __init__(self, links, open_links="browser", open=False) -> None:
+    def __init__(self, configuration, links, open_links="browser", open=False) -> None:
         """Initialize the link selection screen."""
         """
         links: list of tuples with link title and URL
@@ -259,6 +224,7 @@ class LinkSelectionScreen(ModalScreen):
         self.links: Any = links
         self.open_links: str = open_links
         self.open: bool = open
+        self.configuration: Configuration = configuration
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the link selection screen."""
@@ -297,7 +263,7 @@ class LinkSelectionScreen(ModalScreen):
 
             # Save the file to the download folder
             try:
-                with open(file=os.path.join(download_folder, filename), mode="wb") as file:
+                with open(file=os.path.join(self.configuration.download_folder, filename), mode="wb") as file:
                     file.write(httpx_response.content)
             except Exception:
                 self.notify(title="Download", message=f"Error saving {filename}.", timeout=5, severity="error")
@@ -320,10 +286,13 @@ class LinkSelectionScreen(ModalScreen):
         elif self.open_links == "download":
             self.download_file(link=link)
         elif self.open_links == "readwise":
-            if not readwise_token:
+            if not self.configuration.readwise_token:
                 self.notify(title="Readwise", message="No Readwise token found.", timeout=5, severity="warning")
             else:
                 try:
+                    os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
+                    import readwise
+                    from readwise.model import PostResponse
                     response: tuple[bool, PostResponse] = readwise.save_document(url=link)
                 except Exception as err:
                     self.notify(title="Readwise", message=f"Error saving url {link}. Error {err}", timeout=5, severity="error")
@@ -391,7 +360,7 @@ class HelpScreen(Screen):
     def compose(self) -> ComposeResult:
         """Define the content layout of the help screen."""
         yield LinkableMarkdownViewer(
-            markdown="""# Help for ttrsscli
+            markdown="""# Help for ttcli
 ## Navigation
 - **j / k / n**: Navigate articles
 - **J / K**: Navigate categories
@@ -429,7 +398,7 @@ class HelpScreen(Screen):
 
 ## Links
 
-Project home: [https://github.com/reuteras/ttrsscli](https://github.com/reuteras/ttrsscli)
+Project home: [https://github.com/reuteras/ttcli](https://github.com/reuteras/ttcli)
 
 For more about Tiny Tiny RSS, see the [Tiny Tiny RSS website](https://tt-rss.org/). Tiny Tiny RSS is not affiliated with this project.
 """,
@@ -439,7 +408,7 @@ For more about Tiny Tiny RSS, see the [Tiny Tiny RSS website](https://tt-rss.org
         )
 
 # Main Textual App class
-class ttrsscli(App):
+class ttrsscli(App[None]):
     """A Textual app to access and read articles from Tiny Tiny RSS."""
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("?", "toggle_help", "Help"),
@@ -480,46 +449,62 @@ class ttrsscli(App):
         "help": HelpScreen,
     }
     CSS_PATH: str = "styles.tcss"
-    START_TEXT: str = "Welcome to ttrsscli TUI! A text-based interface to Tiny Tiny RSS."
 
-    # State variables
+    def __init__(self) -> None:
+        """Connect to Tiny Tiny RSS and initialize the app."""
+        try:
+            # Load the configuration via the Configuration class sending it command line arguments
+            configuration = Configuration(arguments=sys.argv[1:])
+            self.client = TTRSSClient(url=configuration.api_url, username=configuration.username, password=configuration.password)
+        except TTRNotLoggedIn:
+            print("Error: Could not log in to Tiny Tiny RSS. Check your credentials.")
+            sys.exit(1)
+        except NameResolutionError:
+            print("Error: Couldn't look up server for url.")
+            sys.exit(1)
 
-    # Current article ID
-    article_id: int = 0
-    # Current category ID
-    category_id = None
-    # Current category index position
-    category_index: int = 0
-    # Should urls be cleaned with cleanurl?
-    clean_url: bool = True
-    # Content pane markdown content
-    content_markdown: str = START_TEXT
-    # Current article
-    current_article: Article | None = None
-    # Current article title
-    current_article_title: str = ""
-    # Current article URL (for opening in browser with 'o')
-    current_article_url: str = ""
-    # Expand category view to show feeds for selected category
-    expand_category: bool = False
-    # First view flag used when first started
-    first_view: bool = True
-    # Group articles by feed
-    group_feeds: bool = True
-    # Last key pressed (for j/k navigation)
-    last_key: str = ""
-    # Show header info for article
-    show_header: bool = False
-    # Show unread categories only
-    show_unread_only = reactive(default=True)
-    # Show special categories
-    show_special_categories: bool = False
-    # Tags for articles
-    tags = LimitedSizeDict(max_size=10000)
+        self.START_TEXT: str = "Welcome to ttcli TUI! A text-based interface to Tiny Tiny RSS."
+        # State variables
+
+        # Current article ID
+        self.article_id: int = 0
+        # Current category ID
+        self.category_id = None
+        # Current category index position
+        self.category_index: int = 0
+        # Should urls be cleaned with cleanurl?
+        self.clean_url: bool = True
+        # Configuration
+        self.configuration: Configuration = configuration
+        # Content pane markdown content
+        self.content_markdown: str = self.START_TEXT
+        # Current article
+        self.current_article: Article | None = None
+        # Current article title
+        self.current_article_title: str = ""
+        # Current article URL (for opening in browser with 'o')
+        self.current_article_url: str = ""
+        # Expand category view to show feeds for selected category
+        self.expand_category: bool = False
+        # First view flag used when first started
+        self.first_view: bool = True
+        # Group articles by feed
+        self.group_feeds: bool = True
+        # Last key pressed (for j/k navigation)
+        self.last_key: str = ""
+        # Show header info for article
+        self.show_header: bool = False
+        # Show unread categories only
+        self.show_unread_only = reactive(default=True)
+        # Show special categories
+        self.show_special_categories: bool = False
+        # Tags for articles
+        self.tags = LimitedSizeDict(max_size=10000)
+        super().__init__()
 
     def compose(self) -> ComposeResult:
         """Compose the three pane layout."""
-        yield Header(show_clock=True, name="ttrsscli")
+        yield Header(show_clock=True, name="ttcli")
         with Horizontal():
             yield ListView(id="categories")
             with Vertical():
@@ -594,9 +579,13 @@ class ttrsscli(App):
 
     def action_add_to_later_app(self, open=False) -> None:
         """Add article to later app."""
-        if not readwise_token:
+        if not self.configuration.readwise_token:
             self.notify(title="Readwise", message="No Readwise token found.", timeout=5, severity="warning")
         elif hasattr(self, 'current_article_url') and self.current_article_url:
+            os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
+            import readwise
+            from readwise.model import PostResponse
+
             try:
                 response: tuple[bool, PostResponse] = readwise.save_document(url=self.current_article_url)
             except Exception as err:
@@ -638,23 +627,23 @@ class ttrsscli(App):
         # Title for the note
         title: str = datetime.now().strftime(format="%Y%m%d%H%M ") + self.current_article_title if self.current_article_title else datetime.now().strftime(format="%Y-%m-%d %H:%M:%S")
         title = title.replace(":", "-").replace("/", "-").replace("\\", "-")
-        if obsidian_folder:
-            title = obsidian_folder + "/" + title
+        if self.configuration.obsidian_folder:
+            title = self.configuration.obsidian_folder + "/" + title
         
         # Use template to create note content
-        content: str = template.replace("<URL>", self.current_article_url)
+        content: str = self.configuration.obsidian_template.replace("<URL>", self.current_article_url)
         content = content.replace("<ID>", datetime.now().strftime(format="%Y%m%d%H%M "))
         content = content.replace("<CONTENT>", self.content_markdown_original)
         content = content.replace("<TITLE>", self.current_article_title)
-        tags = obsidian_default_tag + "  \n"
+        tags = self.configuration.obsidian_default_tag + "  \n"
         article_labels = ""
         article_tags = ""
-        if self.show_header and obsidian_include_labels:
+        if self.show_header and self.configuration.obsidian_include_labels:
             try:
                 article_labels: str = f"  - {", ".join(item[1] for item in self.current_article.labels)}" # type: ignore
             except AttributeError:
                 article_labels = ""
-        if self.show_header and obsidian_include_tags:
+        if self.show_header and self.configuration.obsidian_include_tags:
             try:
                 article_tags: str = "\n".join(f"  - {item}" for item in self.tags[self.current_article.id]) # type: ignore
             except KeyError:
@@ -669,7 +658,7 @@ class ttrsscli(App):
         encoded_content: str = quote(string=content)
 
         # Construct the Obsidian URI
-        obsidian_uri: str = f"obsidian://new?vault={obsidian_vault}&file={encoded_title}&content={encoded_content}"
+        obsidian_uri: str = f"obsidian://new?vault={self.configuration.obsidian_vault}&file={encoded_title}&content={encoded_content}"
 
         # Open the Obsidian URI (this will create or update the note)
         webbrowser.open(url=obsidian_uri)
@@ -729,7 +718,7 @@ class ttrsscli(App):
     async def action_open_article_url(self):
         """Open links from the article in a web browser."""
         if hasattr(self, 'current_article_urls') and self.current_article_urls:
-            self.push_screen(screen=LinkSelectionScreen(links=self.current_article_urls))
+            self.push_screen(screen=LinkSelectionScreen(configuration=self.configuration, links=self.current_article_urls))
         else:
             self.notify(message="No links found!", title="Info")
 
@@ -760,14 +749,14 @@ class ttrsscli(App):
     def action_readwise_article_url(self) -> None:
         """Add one article link to later app."""
         if hasattr(self, 'current_article_url') and self.current_article_urls:
-            self.push_screen(screen=LinkSelectionScreen(links=self.current_article_urls, open_links="readwise"))
+            self.push_screen(screen=LinkSelectionScreen(configuration=self.configuration, links=self.current_article_urls, open_links="readwise"))
         else:
             self.notify(title="Readwise", message="No article selected or no URLs available.", timeout=5, severity="warning")
 
     def action_readwise_article_url_and_open(self) -> None:
         """Add one article link to later app."""
         if hasattr(self, 'current_article_url') and self.current_article_urls:
-            self.push_screen(screen=LinkSelectionScreen(links=self.current_article_urls, open_links="readwise", open=True))
+            self.push_screen(screen=LinkSelectionScreen(configuration=self.configuration, links=self.current_article_urls, open_links="readwise", open=True))
         else:
             self.notify(title="Readwise", message="No article selected or no URLs available.", timeout=5, severity="warning")
 
@@ -779,7 +768,7 @@ class ttrsscli(App):
     def action_save_article_url(self) -> None:
         """Save selected link from article to download folder."""
         if hasattr(self, 'current_article_urls') and self.current_article_urls:
-            self.push_screen(screen=LinkSelectionScreen(links=self.current_article_urls, open_links="download"))
+            self.push_screen(screen=LinkSelectionScreen(configuration=self.configuration, links=self.current_article_urls, open_links="download"))
         else:
             self.notify(title="Save link", message="No article selected or no URLs available.", timeout=5, severity="warning")
 
@@ -803,7 +792,7 @@ class ttrsscli(App):
     async def action_toggle_header(self) -> None:
         """Toggle header info for article."""
         self.show_header = not self.show_header
-        client.mark_unread(article_id=self.current_article.id) # type: ignore
+        self.client.mark_unread(article_id=self.current_article.id) # type: ignore
         await self.display_article_content(article_id=self.current_article.id) # type: ignore
 
     async def action_toggle_feeds(self) -> None:
@@ -821,7 +810,7 @@ class ttrsscli(App):
     def action_toggle_read(self) -> None:
         """Toggle article read and unread."""
         if hasattr(self, 'article_id') and self.article_id:
-            client.toggle_unread(article_id=self.article_id)
+            self.client.toggle_unread(article_id=self.article_id)
         else:
             self.notify(title="Article", message="No article selected or no article_id available.", timeout=5, severity="error")
 
@@ -836,7 +825,7 @@ class ttrsscli(App):
     def action_toggle_star(self) -> None:
         """Toggle article (un)starred."""
         if hasattr(self, 'article_id') and self.article_id:
-            client.toggle_starred(article_id=self.article_id)
+            self.client.toggle_starred(article_id=self.article_id)
         else:
             self.notify(title="Article", message="No article selected or no article_id available.", timeout=5, severity="error")
 
@@ -857,7 +846,7 @@ class ttrsscli(App):
         """Fetch, clean, and display the selected article's content."""
         try:
             # Fetch the full article
-            articles: list[Article] = client.get_articles(article_id=article_id)
+            articles: list[Article] = self.client.get_articles(article_id=article_id)
         except Exception as err:
             self.notify(title="Article", message=f"Error fetching article content: {err}", timeout=5, severity="error")
 
@@ -889,7 +878,7 @@ class ttrsscli(App):
             content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
             content_view.document.update(markdown=self.content_markdown)
 
-            client.mark_read(article_id=article_id)
+            self.client.mark_read(article_id=article_id)
             await self.refresh_categories()
 
     def get_clean_url(self, url: str) -> str:
@@ -961,7 +950,7 @@ class ttrsscli(App):
         await list_view.clear()
 
         try:
-            articles: list[Headline] = client.get_headlines(feed_id=feed_id, is_cat=is_cat, view_mode=view_mode)
+            articles: list[Headline] = self.client.get_headlines(feed_id=feed_id, is_cat=is_cat, view_mode=view_mode)
             feed_title: str = ""
             for article in articles:
                 self.tags[article.id] = article.tags # type: ignore
@@ -1002,7 +991,7 @@ class ttrsscli(App):
         existing_ids: list[str] = []
 
         # Get all categories
-        categories: list[Category] = client.get_categories()
+        categories: list[Category] = self.client.get_categories()
 
         # Listview for categories and clear it
         list_view: ListView = self.query_one(selector="#categories", expect_type=ListView)
@@ -1038,7 +1027,7 @@ class ttrsscli(App):
 
                 # Expand category view to show feeds or show special categories (always expanded)
                 if (self.expand_category and self.category_id == category_id and not self.show_special_categories) or (self.show_special_categories and category.title == "Special"): # type: ignore
-                    feeds: list[Feed] = client.get_feeds(cat_id=category.id, unread_only=unread_only) # type: ignore
+                    feeds: list[Feed] = self.client.get_feeds(cat_id=category.id, unread_only=unread_only) # type: ignore
                     for feed in feeds:
                         feed_id: str = f"feed_{feed.id}" # type: ignore
                         if feed_id not in existing_ids:
@@ -1059,15 +1048,7 @@ class ttrsscli(App):
         list_view.styles.width = estimated_width
 
 def main() -> None:
-    """Run the ttrsscli app."""
-    # Use argparse and to add arguments
-    arg_parser = argparse.ArgumentParser(description="A Textual app to access and read articles from Tiny Tiny RSS.")
-    arg_parser.add_argument("--config", help="Path to the config file")
-    args = arg_parser.parse_args()
-
-    # Load the config file
-    config_file: str = args.config if args.config else "config.toml"
-    
+    """Run the ttcli app."""
     app = ttrsscli()
     app.run()
 
