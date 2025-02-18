@@ -1,5 +1,6 @@
 """Command line tool to access Tiny Tiny RSS."""
 import argparse
+from email.policy import default
 import functools
 import html
 import os
@@ -175,7 +176,12 @@ class Configuration:
         # Use argparse and to add arguments
         arg_parser = argparse.ArgumentParser(description="A Textual app to access and read articles from Tiny Tiny RSS.")
         arg_parser.add_argument("--config", dest="config", help="Path to the config file", default="config.toml")
+        arg_parser.add_argument("--version", dest="version", type=bool, help="Show version", default=False)
         args: argparse.Namespace = arg_parser.parse_args(args=arguments)
+
+        if args.version:
+            import importlib.metadata
+            print(importlib.metadata.version(distribution_name='ttrsscli'))
 
         self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
         try:
