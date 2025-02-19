@@ -1,6 +1,5 @@
 """Command line tool to access Tiny Tiny RSS."""
 import argparse
-from email.policy import default
 import functools
 import html
 import os
