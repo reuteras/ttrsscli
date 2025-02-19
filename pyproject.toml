@@ -35,9 +35,6 @@ Issues = "https://github.com/reuteras/ttrsscli/issues"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv.sources]
-ttrss-python = { git = "https://github.com/Vassius/ttrss-python.git", rev = "master" }
-
 [dependency-groups]
 dev = [
     "pylint>=3.3.4",
@@ -63,3 +60,6 @@ fix = true
 
 [tool.ruff.lint.pydocstyle]
 convention="google"
+
+[tool.uv.sources]
+ttrss-python = { git = "https://github.com/reuteras/ttrss-python.git", rev = "master" }
