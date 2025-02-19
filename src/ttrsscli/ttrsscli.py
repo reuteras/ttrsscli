@@ -716,7 +716,7 @@ class ttrsscli(App[None]):
     def action_open_original_article(self) -> None:
         """Open the original article in a web browser."""
         if hasattr(self, 'current_article_url') and self.current_article_url:
-            webbrowser.open(self.current_article_url)
+            webbrowser.open(url=self.current_article_url)
         else:
             self.notify(message="No article selected or no URL available.", title="Info")
 
@@ -1055,6 +1055,14 @@ def main() -> None:
     """Run the ttcli app."""
     app = ttrsscli()
     app.run()
+
+
+def main_web() -> None:
+    """Run the ttcli app in web mode."""
+    from textual_serve.server import Server
+
+    app = Server(command="ttrsscli")
+    app.serve()
 
 if __name__ == "__main__":
     app = ttrsscli()

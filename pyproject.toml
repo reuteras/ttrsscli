@@ -19,13 +19,14 @@ dependencies = [
     "markdownify>=0.14.1",
     "readwise-api>=0.3.0",
     "requests>=2.32.3",
+    "textual-serve>=1.1.1",
     "textual[syntax]>=1.0.0",
     "toml>=0.10.2",
     "ttrss-python",
 ]
 [project.scripts]
-ttcli = "ttrsscli:main"
 ttrsscli = "ttrsscli:main"
+ttrsscli-web = "ttrsscli:main_web"
 
 [project.urls]
 Homepage = "https://github.com/reuteras/ttrsscli"
