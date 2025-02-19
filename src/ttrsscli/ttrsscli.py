@@ -918,7 +918,6 @@ class ttrsscli(App[None]):
             except AttributeError:
                 pass
             try:
-                self.notify(title="Tags", message=f"Tags: {type(self.tags[article.id][0])}", timeout=5) # type: ignore
                 header += f"> **Tags:** {", ".join(self.tags[article.id])}  \n" if len(self.tags[article.id][0]) > 0 else "" # type: ignore
             except KeyError:
                 pass
