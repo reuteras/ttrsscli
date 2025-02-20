@@ -521,18 +521,16 @@ class ttrsscli(App[None]):
     async def on_list_view_highlighted(self, message: Message) -> None:
         """Called when an item is highlighted in the ListViews (both categories and articles)."""
         highlighted_item: Any = message.item # type: ignore
-
         try:
             if not highlighted_item is None:
-                # Update category index position for navigation
-                if hasattr(highlighted_item, "parent") and hasattr(highlighted_item.parent, "index"):
-                    self.category_index = highlighted_item.parent.index
-
                 # Handle category selection -> refresh articles
                 if highlighted_item.id.startswith("cat_"):
                     category_id = int(highlighted_item.id.replace("cat_", ""))
                     self.category_id = highlighted_item.id
                     await self.refresh_articles(show_id=category_id)
+                    # Update category index position for navigation
+                    if hasattr(highlighted_item, "parent") and hasattr(highlighted_item.parent, "index"):
+                        self.category_index = highlighted_item.parent.index
 
                 # Handle feed selection in expanded category view -> refresh articles
                 elif highlighted_item.id.startswith("feed_"):
@@ -710,9 +708,13 @@ class ttrsscli(App[None]):
         list_view.focus()
         if self.first_view:
             self.first_view = False
+            self.category_index = 0
+        elif list_view.index is None:
+            list_view.index = 0
+            self.category_index = 0
         else:
             list_view.index = self.category_index
-        list_view.action_cursor_down()
+            list_view.action_cursor_down()
 
     def action_open_original_article(self) -> None:
         """Open the original article in a web browser."""
@@ -742,9 +744,12 @@ class ttrsscli(App[None]):
         list_view.focus()
         if self.first_view:
             self.first_view = False
+            self.category_index = 0
+        elif list_view.index == 0:
+            pass
         else:
             list_view.index = self.category_index
-        list_view.action_cursor_up()
+            list_view.action_cursor_up()
 
     async def action_recently_read(self) -> None:
         """Open recently read articles."""
@@ -876,8 +881,10 @@ class ttrsscli(App[None]):
             # Add document urls to list
             self.current_article_urls = []
             for a in soup.find_all(name="a"):
-                self.current_article_urls.append((a.get_text(), self.get_clean_url(url=a['href']))) # type: ignore
-
+                try:
+                    self.current_article_urls.append((a.get_text(), self.get_clean_url(url=a['href']))) # type: ignore
+                except KeyError:
+                    pass
             self.content_markdown_original: str = markdownify(html=str(object=soup)).replace('xml encoding="UTF-8"', "")
 
             header: str = self.get_header(article=article)
