@@ -1256,6 +1256,7 @@ dependencies = [
     { name = "readwise-api" },
     { name = "requests" },
     { name = "textual", extra = ["syntax"] },
+    { name = "textual-serve" },
     { name = "toml" },
     { name = "ttrss-python" },
 ]
@@ -1276,6 +1277,7 @@ requires-dist = [
     { name = "readwise-api", specifier = ">=0.3.0" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "textual", extras = ["syntax"], specifier = ">=1.0.0" },
+    { name = "textual-serve", specifier = ">=1.1.1" },
     { name = "toml", specifier = ">=0.10.2" },
     { name = "ttrss-python", git = "https://github.com/reuteras/ttrss-python.git?rev=master" },
 ]
