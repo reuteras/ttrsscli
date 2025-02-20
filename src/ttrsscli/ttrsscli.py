@@ -708,13 +708,13 @@ class ttrsscli(App[None]):
         list_view.focus()
         if self.first_view:
             self.first_view = False
-            self.category_index = 0
+            self.category_index = 1
         elif list_view.index is None:
-            list_view.index = 0
-            self.category_index = 0
+            list_view.index = 1
+            self.category_index = 1
         else:
             list_view.index = self.category_index
-            list_view.action_cursor_down()
+        list_view.action_cursor_down()
 
     def action_open_original_article(self) -> None:
         """Open the original article in a web browser."""
@@ -749,7 +749,7 @@ class ttrsscli(App[None]):
             pass
         else:
             list_view.index = self.category_index
-            list_view.action_cursor_up()
+        list_view.action_cursor_up()
 
     async def action_recently_read(self) -> None:
         """Open recently read articles."""
