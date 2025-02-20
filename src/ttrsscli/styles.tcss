@@ -24,4 +24,3 @@ OptionList {
     min-height: 10;
     margin-bottom: 1;  /* Space below the article list */
 }
-

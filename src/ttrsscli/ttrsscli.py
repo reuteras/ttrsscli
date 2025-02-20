@@ -1,11 +1,11 @@
 """Command line tool to access Tiny Tiny RSS."""
+
 import argparse
 import functools
 import html
 import os
 import subprocess
 import sys
-import time
 import webbrowser
 from collections import OrderedDict
 from collections.abc import Generator
@@ -66,13 +66,17 @@ def get_conf_value(op_command: str) -> str:
     """Get the configuration value from 1Password if config starts with 'op '."""
     if op_command.startswith("op "):
         try:
-            result: subprocess.CompletedProcess[str] = subprocess.run(op_command.split(), capture_output=True, text=True, check=True)
+            result: subprocess.CompletedProcess[str] = subprocess.run(
+                op_command.split(), capture_output=True, text=True, check=True
+            )
             return result.stdout.strip()
         except subprocess.CalledProcessError as err:
             print(f"Error executing command '{op_command}': {err}")
             sys.exit(1)
         except FileNotFoundError:
-            print("Error: 'op' command not found. Ensure 1Password CLI is installed and accessible.")
+            print(
+                "Error: 'op' command not found. Ensure 1Password CLI is installed and accessible."
+            )
             sys.exit(1)
         except NameResolutionError:
             print("Error: Couldn't look up server for url.")
@@ -100,7 +104,6 @@ def handle_session_expiration(api_method):
                 return api_method(self, *args, **kwargs)
         except Exception as err:
             if "NOT_LOGGED_IN" in str(object=err):
-
                 # Re-login
                 if not self.login():
                     raise RuntimeError("Re-authentication failed") from err
@@ -108,17 +111,21 @@ def handle_session_expiration(api_method):
                 # Retry the original function call
                 return api_method(self, *args, **kwargs)
             raise err
+
     return wrapper
 
 
 class TTRSSClient:
     """A wrapper for ttrss-python to reauthenticate on failure."""
+
     def __init__(self, url, username, password) -> None:
         """Initialize the TTRSS client."""
         self.url: str = url
         self.username: str = username
         self.password: str = password
-        self.api = TTRClient(url=self.url, user=self.username, password=self.password, auto_login=False)
+        self.api = TTRClient(
+            url=self.url, user=self.username, password=self.password, auto_login=False
+        )
         self.login()
 
     def login(self) -> bool:
@@ -147,7 +154,9 @@ class TTRSSClient:
     @handle_session_expiration
     def get_headlines(self, feed_id, is_cat, view_mode) -> list[Headline]:
         """Fetch headlines for a feed, retrying if session expires."""
-        return self.api.get_headlines(feed_id=feed_id, is_cat=is_cat, view_mode=view_mode)
+        return self.api.get_headlines(
+            feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
+        )
 
     @handle_session_expiration
     def mark_read(self, article_id) -> None:
@@ -172,28 +181,60 @@ class TTRSSClient:
 
 class Configuration:
     """A class to handle configuration values."""
+
     def __init__(self, arguments) -> None:
         """Initialize the configuration."""
         # Use argparse and to add arguments
-        arg_parser = argparse.ArgumentParser(description="A Textual app to access and read articles from Tiny Tiny RSS.")
-        arg_parser.add_argument("--config", dest="config", help="Path to the config file", default="config.toml")
-        arg_parser.add_argument("--version", dest="version", type=bool, help="Show version", default=False)
+        arg_parser = argparse.ArgumentParser(
+            description="A Textual app to access and read articles from Tiny Tiny RSS."
+        )
+        arg_parser.add_argument(
+            "--config",
+            dest="config",
+            help="Path to the config file",
+            default="config.toml",
+        )
+        arg_parser.add_argument(
+            "--version", dest="version", type=bool, help="Show version", default=False
+        )
         args: argparse.Namespace = arg_parser.parse_args(args=arguments)
 
         self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
         try:
-            self.api_url: str = get_conf_value(op_command=self.config["ttrss"].get("api_url", ""))
-            self.username: str = get_conf_value(op_command=self.config["ttrss"].get("username", ""))
-            self.password: str = get_conf_value(op_command=self.config["ttrss"].get("password", ""))
-            self.download_folder: str = get_conf_value(op_command=self.config["general"].get("download_folder", ""))
-            self.readwise_token: str = get_conf_value(op_command=self.config["readwise"].get("token", ""))
-            self.obsidian_vault: str = get_conf_value(op_command=self.config["obsidian"].get("vault", ""))
-            self.obsidian_folder: str = get_conf_value(op_command=self.config["obsidian"].get("folder", ""))
-            self.obsidian_default_tag: str = get_conf_value(op_command=self.config["obsidian"].get("default_tag", ""))
-            self.obsidian_include_tags: bool = self.config["obsidian"].get("include_tags", "False")
-            self.obsidian_include_labels: bool = self.config["obsidian"].get("include_labels", "True")
-            self.obsidian_template: str = get_conf_value(op_command=self.config["obsidian"].get("template", ""))
-            self.version: str = metadata.version(distribution_name='ttrsscli')
+            self.api_url: str = get_conf_value(
+                op_command=self.config["ttrss"].get("api_url", "")
+            )
+            self.username: str = get_conf_value(
+                op_command=self.config["ttrss"].get("username", "")
+            )
+            self.password: str = get_conf_value(
+                op_command=self.config["ttrss"].get("password", "")
+            )
+            self.download_folder: str = get_conf_value(
+                op_command=self.config["general"].get("download_folder", "")
+            )
+            self.readwise_token: str = get_conf_value(
+                op_command=self.config["readwise"].get("token", "")
+            )
+            self.obsidian_vault: str = get_conf_value(
+                op_command=self.config["obsidian"].get("vault", "")
+            )
+            self.obsidian_folder: str = get_conf_value(
+                op_command=self.config["obsidian"].get("folder", "")
+            )
+            self.obsidian_default_tag: str = get_conf_value(
+                op_command=self.config["obsidian"].get("default_tag", "")
+            )
+            self.obsidian_include_tags: bool = self.config["obsidian"].get(
+                "include_tags", "False"
+            )
+            self.obsidian_include_labels: bool = self.config["obsidian"].get(
+                "include_labels", "True"
+            )
+            self.obsidian_template: str = get_conf_value(
+                op_command=self.config["obsidian"].get("template", "")
+            )
+            self.version: str = metadata.version(distribution_name="ttrsscli")
         except KeyError as err:
             print(f"Error reading configuration: {err}")
             sys.exit(1)
@@ -208,7 +249,17 @@ class Configuration:
 
 
 # Shared constants
-ALLOW_IN_FULL_SCREEN: list[str] = ["arrow_up", "arrow_down", "page_up", "page_down", "down", "up", "right", "left", "enter"]
+ALLOW_IN_FULL_SCREEN: list[str] = [
+    "arrow_up",
+    "arrow_down",
+    "page_up",
+    "page_down",
+    "down",
+    "up",
+    "right",
+    "left",
+    "enter",
+]
 
 
 # Textual Screen classes
@@ -237,9 +288,14 @@ class LinkSelectionScreen(ModalScreen):
         elif self.open_links == "download":
             yield Label(renderable="Select a link to download (ESC to go back):")
         elif self.open_links == "readwise":
-            yield Label(renderable="Select a link to save to Readwise (ESC to go back):")
+            yield Label(
+                renderable="Select a link to save to Readwise (ESC to go back):"
+            )
         link_select = ListView(
-            *[ListItem(Label(renderable=f"{link[0]}\n{link[1]}")) for link in self.links]
+            *[
+                ListItem(Label(renderable=f"{link[0]}\n{link[1]}"))
+                for link in self.links
+            ]
         )
         # Longest link title or link URL
         longest_link: int = 0
@@ -254,9 +310,16 @@ class LinkSelectionScreen(ModalScreen):
         """Download a file from the given URL and save to download folder."""
         try:
             with httpx.Client() as http_client:
-                httpx_response: httpx.Response = http_client.get(url=link, follow_redirects=True)
+                httpx_response: httpx.Response = http_client.get(
+                    url=link, follow_redirects=True
+                )
         except Exception as err:
-            self.notify(title="Download", message=f"Error downloading {link}. Error {err}", timeout=5, severity="error")
+            self.notify(
+                title="Download",
+                message=f"Error downloading {link}. Error {err}",
+                timeout=5,
+                severity="error",
+            )
 
         if httpx_response.status_code == httpx.codes.OK:
             try:
@@ -267,13 +330,26 @@ class LinkSelectionScreen(ModalScreen):
 
             # Save the file to the download folder
             try:
-                with open(file=os.path.join(self.configuration.download_folder, filename), mode="wb") as file:
+                with open(
+                    file=os.path.join(self.configuration.download_folder, filename),
+                    mode="wb",
+                ) as file:
                     file.write(httpx_response.content)
             except Exception:
-                self.notify(title="Download", message=f"Error saving {filename}.", timeout=5, severity="error")
+                self.notify(
+                    title="Download",
+                    message=f"Error saving {filename}.",
+                    timeout=5,
+                    severity="error",
+                )
             self.notify(title="Saved", message=f"Saved {filename}.", timeout=5)
         else:
-            self.notify(title="Download", message=f"Error downloading {link}. Status code {httpx_response.status_code}.", timeout=5, severity="error")
+            self.notify(
+                title="Download",
+                message=f"Error downloading {link}. Status code {httpx_response.status_code}.",
+                timeout=5,
+                severity="error",
+            )
 
     def on_key(self, event) -> None:
         """Close the full-screen Markdown viewer on any key press."""
@@ -291,19 +367,39 @@ class LinkSelectionScreen(ModalScreen):
             self.download_file(link=link)
         elif self.open_links == "readwise":
             if not self.configuration.readwise_token:
-                self.notify(title="Readwise", message="No Readwise token found.", timeout=5, severity="warning")
+                self.notify(
+                    title="Readwise",
+                    message="No Readwise token found.",
+                    timeout=5,
+                    severity="warning",
+                )
             else:
                 try:
                     os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
                     import readwise
                     from readwise.model import PostResponse
-                    response: tuple[bool, PostResponse] = readwise.save_document(url=link)
+
+                    response: tuple[bool, PostResponse] = readwise.save_document(
+                        url=link
+                    )
                 except Exception as err:
-                    self.notify(title="Readwise", message=f"Error saving url {link}. Error {err}", timeout=5, severity="error")
+                    self.notify(
+                        title="Readwise",
+                        message=f"Error saving url {link}. Error {err}",
+                        timeout=5,
+                        severity="error",
+                    )
                 if response[1].url and response[1].id:
-                    self.notify(title="Readwise", message=f"Url {link} saved.", timeout=5)
+                    self.notify(
+                        title="Readwise", message=f"Url {link} saved.", timeout=5
+                    )
                 else:
-                    self.notify(title="Readwise", message=f"Error saving url {link}.", timeout=5, severity="error")
+                    self.notify(
+                        title="Readwise",
+                        message=f"Error saving url {link}.",
+                        timeout=5,
+                        severity="error",
+                    )
                 if self.open:
                     webbrowser.open(url=response[1].url)
         self.app.pop_screen()
@@ -322,6 +418,7 @@ class LinkableMarkdownViewer(MarkdownViewer):
 
 class FullScreenMarkdown(Screen):
     """A full-screen Markdown viewer."""
+
     def __init__(self, markdown_content: str) -> None:
         """Initialize the full-screen Markdown viewer."""
         super().__init__()
@@ -329,7 +426,9 @@ class FullScreenMarkdown(Screen):
 
     def compose(self) -> Generator[LinkableMarkdownViewer, Any, None]:
         """Define the content layout of the full-screen Markdown viewer."""
-        yield LinkableMarkdownViewer(markdown=self.markdown_content, show_table_of_contents=True)
+        yield LinkableMarkdownViewer(
+            markdown=self.markdown_content, show_table_of_contents=True
+        )
 
     def on_key(self, event) -> None:
         """Close the full-screen Markdown viewer on any key press."""
@@ -341,6 +440,7 @@ class FullScreenMarkdown(Screen):
 
 class FullScreenTextArea(Screen):
     """A full-screen TextArea."""
+
     def __init__(self, text: str) -> None:
         """Initialize the full-screen TextArea."""
         super().__init__()
@@ -409,19 +509,25 @@ For more about Tiny Tiny RSS, see the [Tiny Tiny RSS website](https://tt-rss.org
 """,
             id="fullscreen-content",
             show_table_of_contents=False,
-            open_links=False
+            open_links=False,
         )
+
 
 # Main Textual App class
 class ttrsscli(App[None]):
     """A Textual app to access and read articles from Tiny Tiny RSS."""
+
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("?", "toggle_help", "Help"),
         ("C", "toggle_clean_url", "Toggle clean urls with cleanurl"),
         ("c", "clear", "Clear"),
         ("comma", "refresh", "Refresh"),
         ("ctrl+l", "readwise_article_url", "Add link in article to later app"),
-        ("ctrl+shift+l", "readwise_article_url_and_open", "Add link in article to later app"),
+        (
+            "ctrl+shift+l",
+            "readwise_article_url_and_open",
+            "Add link in article to later app",
+        ),
         ("ctrl+o", "open_article_url", "Open article urls"),
         ("ctrl+s", "save_article_url", "Save link to download folder"),
         ("d", "toggle_dark", "Toggle dark mode"),
@@ -461,7 +567,11 @@ class ttrsscli(App[None]):
         try:
             # Load the configuration via the Configuration class sending it command line arguments
             configuration = Configuration(arguments=sys.argv[1:])
-            self.client = TTRSSClient(url=configuration.api_url, username=configuration.username, password=configuration.password)
+            self.client = TTRSSClient(
+                url=configuration.api_url,
+                username=configuration.username,
+                password=configuration.password,
+            )
         except TTRNotLoggedIn:
             print("Error: Could not log in to Tiny Tiny RSS. Check your credentials.")
             sys.exit(1)
@@ -469,7 +579,9 @@ class ttrsscli(App[None]):
             print("Error: Couldn't look up server for url.")
             sys.exit(1)
 
-        self.START_TEXT: str = "Welcome to ttcli TUI! A text-based interface to Tiny Tiny RSS."
+        self.START_TEXT: str = (
+            "Welcome to ttcli TUI! A text-based interface to Tiny Tiny RSS."
+        )
         # State variables
 
         # Current article ID
@@ -515,12 +627,14 @@ class ttrsscli(App[None]):
             yield ListView(id="categories")
             with Vertical():
                 yield ListView(id="articles")
-                yield LinkableMarkdownViewer(id="content", show_table_of_contents=False, markdown=self.START_TEXT)
+                yield LinkableMarkdownViewer(
+                    id="content", show_table_of_contents=False, markdown=self.START_TEXT
+                )
         yield Footer()
 
     async def on_list_view_highlighted(self, message: Message) -> None:
         """Called when an item is highlighted in the ListViews (both categories and articles)."""
-        highlighted_item: Any = message.item # type: ignore
+        highlighted_item: Any = message.item  # type: ignore
         try:
             if not highlighted_item is None:
                 # Handle category selection -> refresh articles
@@ -529,7 +643,9 @@ class ttrsscli(App[None]):
                     self.category_id = highlighted_item.id
                     await self.refresh_articles(show_id=category_id)
                     # Update category index position for navigation
-                    if hasattr(highlighted_item, "parent") and hasattr(highlighted_item.parent, "index"):
+                    if hasattr(highlighted_item, "parent") and hasattr(
+                        highlighted_item.parent, "index"
+                    ):
                         self.category_index = highlighted_item.parent.index
 
                 # Handle feed selection in expanded category view -> refresh articles
@@ -557,7 +673,7 @@ class ttrsscli(App[None]):
 
     async def on_list_view_selected(self, message: Message) -> None:
         """Called when an item is selected in the ListViews (both category and article)."""
-        selected_item: Any = message.item # type: ignore
+        selected_item: Any = message.item  # type: ignore
 
         try:
             if selected_item:
@@ -584,24 +700,50 @@ class ttrsscli(App[None]):
     def action_add_to_later_app(self, open=False) -> None:
         """Add article to later app."""
         if not self.configuration.readwise_token:
-            self.notify(title="Readwise", message="No Readwise token found.", timeout=5, severity="warning")
-        elif hasattr(self, 'current_article_url') and self.current_article_url:
+            self.notify(
+                title="Readwise",
+                message="No Readwise token found.",
+                timeout=5,
+                severity="warning",
+            )
+        elif hasattr(self, "current_article_url") and self.current_article_url:
             os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
             import readwise
             from readwise.model import PostResponse
 
             try:
-                response: tuple[bool, PostResponse] = readwise.save_document(url=self.current_article_url)
+                response: tuple[bool, PostResponse] = readwise.save_document(
+                    url=self.current_article_url
+                )
             except Exception as err:
-                self.notify(title="Readwise", message=f"Error saving url {self.current_article_url}. Error {err}", timeout=5, severity="error")
+                self.notify(
+                    title="Readwise",
+                    message=f"Error saving url {self.current_article_url}. Error {err}",
+                    timeout=5,
+                    severity="error",
+                )
             if response[1].url and response[1].id:
-                self.notify(title="Readwise", message=f"Url {self.current_article_url} saved.", timeout=5)
+                self.notify(
+                    title="Readwise",
+                    message=f"Url {self.current_article_url} saved.",
+                    timeout=5,
+                )
                 if open:
                     webbrowser.open(url=response[1].url)
             else:
-                self.notify(title="Readwise", message=f"Error saving url {self.current_article_url}.", timeout=5, severity="error")
+                self.notify(
+                    title="Readwise",
+                    message=f"Error saving url {self.current_article_url}.",
+                    timeout=5,
+                    severity="error",
+                )
         else:
-            self.notify(title="Readwise", message="No article selected or no URL available.", timeout=5, severity="warning")
+            self.notify(
+                title="Readwise",
+                message="No article selected or no URL available.",
+                timeout=5,
+                severity="warning",
+            )
 
     def action_add_to_later_app_and_open(self) -> None:
         """Add article to later app and open that Readwise page in browser."""
@@ -617,11 +759,15 @@ class ttrsscli(App[None]):
         self.current_article_urls: list[Any] = []
 
         try:
-            list_view: ListView = self.query_one(selector="#articles", expect_type=ListView)
+            list_view: ListView = self.query_one(
+                selector="#articles", expect_type=ListView
+            )
             await list_view.clear()
         except Exception:
             pass
-        content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
+        content_view: LinkableMarkdownViewer = self.query_one(
+            selector="#content", expect_type=LinkableMarkdownViewer
+        )
         await content_view.document.update(markdown=self.content_markdown)
 
     def action_export_to_obsidian(self) -> None:
@@ -629,13 +775,19 @@ class ttrsscli(App[None]):
         # Documentation for Obsidian URI scheme: https://help.obsidian.md/Extending+Obsidian/Obsidian+URI
 
         # Title for the note
-        title: str = datetime.now().strftime(format="%Y%m%d%H%M ") + self.current_article_title if self.current_article_title else datetime.now().strftime(format="%Y-%m-%d %H:%M:%S")
+        title: str = (
+            datetime.now().strftime(format="%Y%m%d%H%M ") + self.current_article_title
+            if self.current_article_title
+            else datetime.now().strftime(format="%Y-%m-%d %H:%M:%S")
+        )
         title = title.replace(":", "-").replace("/", "-").replace("\\", "-")
         if self.configuration.obsidian_folder:
             title = self.configuration.obsidian_folder + "/" + title
-        
+
         # Use template to create note content
-        content: str = self.configuration.obsidian_template.replace("<URL>", self.current_article_url)
+        content: str = self.configuration.obsidian_template.replace(
+            "<URL>", self.current_article_url
+        )
         content = content.replace("<ID>", datetime.now().strftime(format="%Y%m%d%H%M "))
         content = content.replace("<CONTENT>", self.content_markdown_original)
         content = content.replace("<TITLE>", self.current_article_title)
@@ -644,12 +796,17 @@ class ttrsscli(App[None]):
         article_tags = ""
         if self.show_header and self.configuration.obsidian_include_labels:
             try:
-                article_labels: str = f"  - {", ".join(item[1] for item in self.current_article.labels)}" # type: ignore
+                article_labels: str = (
+                    f"  - {', '.join(item[1] for item in self.current_article.labels)}"  # type: ignore
+                )
             except AttributeError:
                 article_labels = ""
         if self.show_header and self.configuration.obsidian_include_tags:
             try:
-                article_tags: str = "\n".join(f"  - {item}" for item in self.tags[self.current_article.id]) # type: ignore
+                article_tags: str = "\n".join(
+                    f"  - {item}"
+                    for item in self.tags[self.current_article.id]  # type: ignore
+                )
             except KeyError:
                 article_tags = ""
         tags += article_labels + article_tags
@@ -688,12 +845,16 @@ class ttrsscli(App[None]):
             current_id: str | None = current_focus.id
             if current_id in panes:
                 previous_index: int = (panes.index(current_id) - 1) % len(panes)
-                previous_pane: Widget = self.query_one(selector=f"#{panes[previous_index]}")
+                previous_pane: Widget = self.query_one(
+                    selector=f"#{panes[previous_index]}"
+                )
                 previous_pane.focus()
 
     def action_maximize_content(self) -> None:
         """Maximize the content pane."""
-        self.push_screen(screen=FullScreenMarkdown(markdown_content=self.content_markdown))
+        self.push_screen(
+            screen=FullScreenMarkdown(markdown_content=self.content_markdown)
+        )
 
     def action_next_article(self) -> None:
         """Open next article."""
@@ -704,7 +865,9 @@ class ttrsscli(App[None]):
 
     def action_next_category(self) -> None:
         """Move to next category."""
-        list_view: ListView = self.query_one(selector="#categories", expect_type=ListView)
+        list_view: ListView = self.query_one(
+            selector="#categories", expect_type=ListView
+        )
         list_view.focus()
         if self.first_view:
             self.first_view = False
@@ -718,15 +881,21 @@ class ttrsscli(App[None]):
 
     def action_open_original_article(self) -> None:
         """Open the original article in a web browser."""
-        if hasattr(self, 'current_article_url') and self.current_article_url:
+        if hasattr(self, "current_article_url") and self.current_article_url:
             webbrowser.open(url=self.current_article_url)
         else:
-            self.notify(message="No article selected or no URL available.", title="Info")
+            self.notify(
+                message="No article selected or no URL available.", title="Info"
+            )
 
     async def action_open_article_url(self):
         """Open links from the article in a web browser."""
-        if hasattr(self, 'current_article_urls') and self.current_article_urls:
-            self.push_screen(screen=LinkSelectionScreen(configuration=self.configuration, links=self.current_article_urls))
+        if hasattr(self, "current_article_urls") and self.current_article_urls:
+            self.push_screen(
+                screen=LinkSelectionScreen(
+                    configuration=self.configuration, links=self.current_article_urls
+                )
+            )
         else:
             self.notify(message="No links found!", title="Info")
 
@@ -740,7 +909,9 @@ class ttrsscli(App[None]):
 
     def action_previous_category(self) -> None:
         """Move to previous category."""
-        list_view: ListView = self.query_one(selector="#categories", expect_type=ListView)
+        list_view: ListView = self.query_one(
+            selector="#categories", expect_type=ListView
+        )
         list_view.focus()
         if self.first_view:
             self.first_view = False
@@ -759,17 +930,40 @@ class ttrsscli(App[None]):
 
     def action_readwise_article_url(self) -> None:
         """Add one article link to later app."""
-        if hasattr(self, 'current_article_url') and self.current_article_urls:
-            self.push_screen(screen=LinkSelectionScreen(configuration=self.configuration, links=self.current_article_urls, open_links="readwise"))
+        if hasattr(self, "current_article_url") and self.current_article_urls:
+            self.push_screen(
+                screen=LinkSelectionScreen(
+                    configuration=self.configuration,
+                    links=self.current_article_urls,
+                    open_links="readwise",
+                )
+            )
         else:
-            self.notify(title="Readwise", message="No article selected or no URLs available.", timeout=5, severity="warning")
+            self.notify(
+                title="Readwise",
+                message="No article selected or no URLs available.",
+                timeout=5,
+                severity="warning",
+            )
 
     def action_readwise_article_url_and_open(self) -> None:
         """Add one article link to later app."""
-        if hasattr(self, 'current_article_url') and self.current_article_urls:
-            self.push_screen(screen=LinkSelectionScreen(configuration=self.configuration, links=self.current_article_urls, open_links="readwise", open=True))
+        if hasattr(self, "current_article_url") and self.current_article_urls:
+            self.push_screen(
+                screen=LinkSelectionScreen(
+                    configuration=self.configuration,
+                    links=self.current_article_urls,
+                    open_links="readwise",
+                    open=True,
+                )
+            )
         else:
-            self.notify(title="Readwise", message="No article selected or no URLs available.", timeout=5, severity="warning")
+            self.notify(
+                title="Readwise",
+                message="No article selected or no URLs available.",
+                timeout=5,
+                severity="warning",
+            )
 
     async def action_refresh(self) -> None:
         """Refresh categories and articles from the server."""
@@ -778,14 +972,30 @@ class ttrsscli(App[None]):
 
     def action_save_article_url(self) -> None:
         """Save selected link from article to download folder."""
-        if hasattr(self, 'current_article_urls') and self.current_article_urls:
-            self.push_screen(screen=LinkSelectionScreen(configuration=self.configuration, links=self.current_article_urls, open_links="download"))
+        if hasattr(self, "current_article_urls") and self.current_article_urls:
+            self.push_screen(
+                screen=LinkSelectionScreen(
+                    configuration=self.configuration,
+                    links=self.current_article_urls,
+                    open_links="download",
+                )
+            )
         else:
-            self.notify(title="Save link", message="No article selected or no URLs available.", timeout=5, severity="warning")
+            self.notify(
+                title="Save link",
+                message="No article selected or no URLs available.",
+                timeout=5,
+                severity="warning",
+            )
 
     def action_show_version(self) -> None:
         """Show version."""
-        self.notify(title="Info", message=f"Version: {self.configuration.version}", timeout=5, severity="information")
+        self.notify(
+            title="Info",
+            message=f"Version: {self.configuration.version}",
+            timeout=5,
+            severity="information",
+        )
 
     async def action_toggle_category(self) -> None:
         """Set expand category."""
@@ -802,13 +1012,15 @@ class ttrsscli(App[None]):
 
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""
-        self.theme = "textual-dark" if self.theme == "textual-light" else "textual-light"
+        self.theme = (
+            "textual-dark" if self.theme == "textual-light" else "textual-light"
+        )
 
     async def action_toggle_header(self) -> None:
         """Toggle header info for article."""
         self.show_header = not self.show_header
-        self.client.mark_unread(article_id=self.current_article.id) # type: ignore
-        await self.display_article_content(article_id=self.current_article.id) # type: ignore
+        self.client.mark_unread(article_id=self.current_article.id)  # type: ignore
+        await self.display_article_content(article_id=self.current_article.id)  # type: ignore
 
     async def action_toggle_feeds(self) -> None:
         """Toggle feed grouping."""
@@ -824,25 +1036,37 @@ class ttrsscli(App[None]):
 
     def action_toggle_read(self) -> None:
         """Toggle article read and unread."""
-        if hasattr(self, 'article_id') and self.article_id:
+        if hasattr(self, "article_id") and self.article_id:
             self.client.toggle_unread(article_id=self.article_id)
         else:
-            self.notify(title="Article", message="No article selected or no article_id available.", timeout=5, severity="error")
+            self.notify(
+                title="Article",
+                message="No article selected or no article_id available.",
+                timeout=5,
+                severity="error",
+            )
 
     async def action_toggle_special_categories(self) -> None:
         """Toggle special categories."""
         self.show_special_categories = not self.show_special_categories
         self.last_key = "S"
-        article_list: ListView = self.query_one(selector="#articles", expect_type=ListView)
+        article_list: ListView = self.query_one(
+            selector="#articles", expect_type=ListView
+        )
         await article_list.clear()
         await self.refresh_categories()
 
     def action_toggle_star(self) -> None:
         """Toggle article (un)starred."""
-        if hasattr(self, 'article_id') and self.article_id:
+        if hasattr(self, "article_id") and self.article_id:
             self.client.toggle_starred(article_id=self.article_id)
         else:
-            self.notify(title="Article", message="No article selected or no article_id available.", timeout=5, severity="error")
+            self.notify(
+                title="Article",
+                message="No article selected or no article_id available.",
+                timeout=5,
+                severity="error",
+            )
 
     async def action_toggle_unread(self) -> None:
         """Toggle unread-only mode and update category labels."""
@@ -863,36 +1087,52 @@ class ttrsscli(App[None]):
             # Fetch the full article
             articles: list[Article] = self.client.get_articles(article_id=article_id)
         except Exception as err:
-            self.notify(title="Article", message=f"Error fetching article content: {err}", timeout=5, severity="error")
+            self.notify(
+                title="Article",
+                message=f"Error fetching article content: {err}",
+                timeout=5,
+                severity="error",
+            )
 
         if articles:
             try:
                 article: Article = articles[0]
             except Exception:
-                self.notify(title="Article", message=f"No article found with ID {article_id}.", timeout=5, severity="error")
+                self.notify(
+                    title="Article",
+                    message=f"No article found with ID {article_id}.",
+                    timeout=5,
+                    severity="error",
+                )
 
             self.current_article = article
 
             # Parse and clean the HTML
-            soup = BeautifulSoup(markup=article.content, features="html.parser") # type: ignore
-            self.current_article_url: str = self.get_clean_url(url=article.link) # type: ignore
-            self.current_article_title: str = article.title # type: ignore
+            soup = BeautifulSoup(markup=article.content, features="html.parser")  # type: ignore
+            self.current_article_url: str = self.get_clean_url(url=article.link)  # type: ignore
+            self.current_article_title: str = article.title  # type: ignore
 
             # Add document urls to list
             self.current_article_urls = []
             for a in soup.find_all(name="a"):
                 try:
-                    self.current_article_urls.append((a.get_text(), self.get_clean_url(url=a['href']))) # type: ignore
+                    self.current_article_urls.append(
+                        (a.get_text(), self.get_clean_url(url=a["href"]))  # type: ignore
+                    )
                 except KeyError:
                     pass
-            self.content_markdown_original: str = markdownify(html=str(object=soup)).replace('xml encoding="UTF-8"', "")
+            self.content_markdown_original: str = markdownify(
+                html=str(object=soup)
+            ).replace('xml encoding="UTF-8"', "")
 
             header: str = self.get_header(article=article)
 
             self.content_markdown = header + self.content_markdown_original
 
             # Display the cleaned content
-            content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
+            content_view: LinkableMarkdownViewer = self.query_one(
+                selector="#content", expect_type=LinkableMarkdownViewer
+            )
             content_view.document.update(markdown=self.content_markdown)
 
             self.client.mark_read(article_id=article_id)
@@ -915,30 +1155,40 @@ class ttrsscli(App[None]):
         if self.show_header:
             header = f"> **Title:** {self.current_article_title}  \n"
             header += f"> **URL:** {self.current_article_url}  \n"
-            if hasattr(article, "author") and article.author: # type: ignore
-                header += f"> **Author:** {article.author}  \n" # type: ignore
-            if hasattr(article, "published") and article.published: # type: ignore
-                header += f"> **Published:** {article.published}  \n" # type: ignore
+            if hasattr(article, "author") and article.author:  # type: ignore
+                header += f"> **Author:** {article.author}  \n"  # type: ignore
+            if hasattr(article, "published") and article.published:  # type: ignore
+                header += f"> **Published:** {article.published}  \n"  # type: ignore
             if hasattr(article, "updated") and article.updated:
-                header += f"> **Updated:** {article.updated}  \n" # type: ignore
-            if hasattr(article, "note") and article.note: # type: ignore
-                header += f"> **Note:** {article.note}  \n" if article.note else "" # type: ignore
-            if hasattr(article, "feed_title") and article.feed_title: # type: ignore
-                header += f"> **Feed:** {article.feed_title}  \n" if article.feed_title else "" # type: ignore
+                header += f"> **Updated:** {article.updated}  \n"  # type: ignore
+            if hasattr(article, "note") and article.note:  # type: ignore
+                header += f"> **Note:** {article.note}  \n" if article.note else ""  # type: ignore
+            if hasattr(article, "feed_title") and article.feed_title:  # type: ignore
+                header += (
+                    f"> **Feed:** {article.feed_title}  \n"  # type: ignore
+                    if article.feed_title  # type: ignore
+                    else ""
+                )
             try:
-                header += f"> **Labels:** {", ".join(item[1] for item in article.labels) if article.labels else ""}  \n" # type: ignore
+                header += f"> **Labels:** {', '.join(item[1] for item in article.labels) if article.labels else ''}  \n"  # type: ignore
             except AttributeError:
                 pass
             try:
-                header += f"> **Tags:** {", ".join(self.tags[article.id])}  \n" if len(self.tags[article.id][0]) > 0 else "" # type: ignore
+                header += (
+                    f"> **Tags:** {', '.join(self.tags[article.id])}  \n"  # type: ignore
+                    if len(self.tags[article.id][0]) > 0  # type: ignore
+                    else ""
+                )
             except KeyError:
                 pass
-            if hasattr(article, "tags") and article.tags: # type: ignore
-                header += f"> **Tags:** {article.tags}  \n" if article.tags else "" # type: ignore
-            if hasattr(article, "lang") and article.lang: # type: ignore
-                header += f"> **Language:** {article.lang}  \n" if article.lang else "" # type: ignore
-            if hasattr(article, "marked") and article.marked: # type: ignore
-                header += f"> **Starred:** {article.marked}  \n" if article.marked else "" # type: ignore
+            if hasattr(article, "tags") and article.tags:  # type: ignore
+                header += f"> **Tags:** {article.tags}  \n" if article.tags else ""  # type: ignore
+            if hasattr(article, "lang") and article.lang:  # type: ignore
+                header += f"> **Language:** {article.lang}  \n" if article.lang else ""  # type: ignore
+            if hasattr(article, "marked") and article.marked:  # type: ignore
+                header += (
+                    f"> **Starred:** {article.marked}  \n" if article.marked else ""  # type: ignore
+                )  # type: ignore
             header += "  \n"
         return header
 
@@ -946,13 +1196,19 @@ class ttrsscli(App[None]):
         """Load articles from selected category or all articles."""
         article_ids: list[str] = []
 
-        view_mode: Literal['all_articles'] | Literal['unread'] = 'all_articles' if self.show_special_categories else 'unread'
+        view_mode: Literal["all_articles"] | Literal["unread"] = (
+            "all_articles" if self.show_special_categories else "unread"
+        )
 
         # Determine if the selected item is a category or feed
         # Show all articles by default
         feed_id = -4
         is_cat = False
-        if not isinstance(show_id, int) and not show_id is None and show_id.startswith("feed_"):
+        if (
+            not isinstance(show_id, int)
+            and not show_id is None
+            and show_id.startswith("feed_")
+        ):
             # We have a feed ID
             feed_id: int = int(show_id.replace("feed_", ""))
             is_cat = False
@@ -966,41 +1222,54 @@ class ttrsscli(App[None]):
         await list_view.clear()
 
         try:
-            articles: list[Headline] = self.client.get_headlines(feed_id=feed_id, is_cat=is_cat, view_mode=view_mode)
+            articles: list[Headline] = self.client.get_headlines(
+                feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
+            )
             feed_title: str = ""
             for article in articles:
-                self.tags[article.id] = article.tags # type: ignore
+                self.tags[article.id] = article.tags  # type: ignore
                 prepend: str = ""
-                if self.group_feeds and article.feed_title not in [feed_title, ""]: # type: ignore
-                    article_id: str = f"ft_{article.feed_id}" # type: ignore
-                    feed_title = html.unescape(article.feed_title.strip()) # type: ignore
+                if self.group_feeds and article.feed_title not in [feed_title, ""]:  # type: ignore
+                    article_id: str = f"ft_{article.feed_id}"  # type: ignore
+                    feed_title = html.unescape(article.feed_title.strip())  # type: ignore
                     if article_id not in article_ids:
-                        feed_title_item = ListItem(Static(content=feed_title), id=article_id)
+                        feed_title_item = ListItem(
+                            Static(content=feed_title), id=article_id
+                        )
                         feed_title_item.styles.color = "white"
                         feed_title_item.styles.background = "blue"
                         list_view.append(item=feed_title_item)
                         article_ids.append(article_id)
-                if article.title != "": # type: ignore
-                    article_id = f"art_{article.id}" # type: ignore
+                if article.title != "":  # type: ignore
+                    article_id = f"art_{article.id}"  # type: ignore
                     if article_id not in article_ids:
-                        style: str = "bold" if article.unread else "none" # type: ignore
-                        if article.note or article.published or article.marked: # type: ignore
+                        style: str = "bold" if article.unread else "none"  # type: ignore
+                        if article.note or article.published or article.marked:  # type: ignore
                             prepend = "("
-                            prepend += "N" if article.note else "" # type: ignore
-                            if article.published: # type: ignore
+                            prepend += "N" if article.note else ""  # type: ignore
+                            if article.published:  # type: ignore
                                 prepend += "P" if prepend == "(" else ", P"
-                            if article.marked: # type: ignore
+                            if article.marked:  # type: ignore
                                 prepend += "S" if prepend == "(" else ", S"
                             prepend += ") "
-                        article_title: str = html.unescape(prepend + article.title.strip()) # type: ignore
-                        article_title_item = ListItem(Static(content=article_title), id=article_id)
+                        article_title: str = html.unescape(
+                            prepend + article.title.strip()  # type: ignore
+                        )
+                        article_title_item = ListItem(
+                            Static(content=article_title), id=article_id
+                        )
                         article_title_item.styles.text_style = style
                         list_view.append(item=article_title_item)
                         article_ids.append(article_id)
             if not articles:
                 await self.action_clear()
         except Exception as err:
-            self.notify(title="Articles", message=f"Error fetching articles: {err}", timeout=5, severity="error")
+            self.notify(
+                title="Articles",
+                message=f"Error fetching articles: {err}",
+                timeout=5,
+                severity="error",
+            )
 
     async def refresh_categories(self) -> None:
         """Load categories from TTRSS and filter based on unread-only mode."""
@@ -1010,46 +1279,84 @@ class ttrsscli(App[None]):
         categories: list[Category] = self.client.get_categories()
 
         # Listview for categories and clear it
-        list_view: ListView = self.query_one(selector="#categories", expect_type=ListView)
+        list_view: ListView = self.query_one(
+            selector="#categories", expect_type=ListView
+        )
         await list_view.clear()
 
         unread_only: bool = False if self.show_special_categories else True
         max_length: int = 0
 
         if not categories is None:
-            for category in sorted(categories, key=lambda x: x.title): # type: ignore
+            for category in sorted(categories, key=lambda x: x.title):  # type: ignore
                 # Skip categories with no unread articles if unread-only mode is enabled and special categories are hidden
-                if not self.show_special_categories and self.show_unread_only and category.unread == 0: # type: ignore
+                if (
+                    not self.show_special_categories
+                    and self.show_unread_only
+                    and category.unread == 0  # type: ignore
+                ):
                     continue
 
                 # category_id is used if expand_category is enabled
-                category_id: str = f"cat_{category.id}" # type: ignore
+                category_id: str = f"cat_{category.id}"  # type: ignore
 
                 # Top-level categories
                 if category_id not in existing_ids:
                     # Handle view special categories
-                    if (self.show_special_categories and category.title == "Special"): # type: ignore
-                        article_count: str = f" ({category.unread})" if category.unread else "" # type: ignore
-                        max_length = max(max_length, len(category.title)) # type: ignore
-                        list_view.append(item=ListItem(Static(content=category.title + article_count), id=category_id)) # type: ignore
+                    if self.show_special_categories and category.title == "Special":  # type: ignore
+                        article_count: str = (
+                            f" ({category.unread})" if category.unread else ""  # type: ignore
+                        )
+                        max_length = max(max_length, len(category.title))  # type: ignore
+                        list_view.append(
+                            item=ListItem(
+                                Static(content=category.title + article_count),  # type: ignore
+                                id=category_id,
+                            )
+                        )  # type: ignore
                     # Handle normal categories
-                    elif (not self.show_special_categories and category.title != "Special"): # type: ignore
-                        article_count: str = f" ({category.unread})" if category.unread else "" # type: ignore
-                        max_length = max(max_length, len(category.title)) # type: ignore
-                        list_view.append(item=ListItem(Static(content=category.title + article_count), id=category_id)) # type: ignore
+                    elif (
+                        not self.show_special_categories and category.title != "Special"  # type: ignore
+                    ):
+                        article_count: str = (
+                            f" ({category.unread})" if category.unread else ""  # type: ignore
+                        )
+                        max_length = max(max_length, len(category.title))  # type: ignore
+                        list_view.append(
+                            item=ListItem(
+                                Static(content=category.title + article_count),  # type: ignore
+                                id=category_id,
+                            )
+                        )
                     else:
                         article_count = ""
                     existing_ids.append(category_id)
 
                 # Expand category view to show feeds or show special categories (always expanded)
-                if (self.expand_category and self.category_id == category_id and not self.show_special_categories) or (self.show_special_categories and category.title == "Special"): # type: ignore
-                    feeds: list[Feed] = self.client.get_feeds(cat_id=category.id, unread_only=unread_only) # type: ignore
+                if (
+                    self.expand_category
+                    and self.category_id == category_id
+                    and not self.show_special_categories
+                ) or (self.show_special_categories and category.title == "Special"):  # type: ignore
+                    feeds: list[Feed] = self.client.get_feeds(
+                        cat_id=category.id,  # type: ignore
+                        unread_only=unread_only,
+                    )
                     for feed in feeds:
-                        feed_id: str = f"feed_{feed.id}" # type: ignore
+                        feed_id: str = f"feed_{feed.id}"  # type: ignore
                         if feed_id not in existing_ids:
-                            feed_unread_count: str = f" ({feed.unread})" if feed.unread else "" # type: ignore
-                            max_length = max(max_length, len(feed.title) + 3) # type: ignore
-                            list_view.append(item=ListItem(Static(content="  " + feed.title + feed_unread_count), id=feed_id)) # type: ignore
+                            feed_unread_count: str = (
+                                f" ({feed.unread})" if feed.unread else ""  # type: ignore
+                            )
+                            max_length = max(max_length, len(feed.title) + 3)  # type: ignore
+                            list_view.append(
+                                item=ListItem(
+                                    Static(
+                                        content="  " + feed.title + feed_unread_count  # type: ignore
+                                    ),
+                                    id=feed_id,
+                                )
+                            )
                             existing_ids.append(feed_id)
                     if self.show_special_categories and self.last_key == "S":
                         list_view.index = 1
@@ -1063,6 +1370,7 @@ class ttrsscli(App[None]):
         estimated_width = min(estimated_width, 80)
         list_view.styles.width = estimated_width
 
+
 def main() -> None:
     """Run the ttcli app."""
     app = ttrsscli()
@@ -1075,6 +1383,7 @@ def main_web() -> None:
 
     app = Server(command="ttrsscli")
     app.serve()
+
 
 if __name__ == "__main__":
     app = ttrsscli()

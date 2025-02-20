@@ -1,4 +1,5 @@
 """Init function."""
+
 from .ttrsscli import main, main_web
 
 if __name__ == "__main_web__":
