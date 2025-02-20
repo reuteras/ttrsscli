@@ -5,10 +5,12 @@ import html
 import os
 import subprocess
 import sys
+import time
 import webbrowser
 from collections import OrderedDict
 from collections.abc import Generator
 from datetime import datetime
+from importlib import metadata
 from time import sleep
 from typing import Any, ClassVar, Literal
 from urllib.parse import quote
@@ -61,7 +63,7 @@ class LimitedSizeDict(OrderedDict):
 
 # Helper function to retrieve credentials from 1Password CLI or return the value directly
 def get_conf_value(op_command: str) -> str:
-    """Get the configuration value."""
+    """Get the configuration value from 1Password if config starts with 'op '."""
     if op_command.startswith("op "):
         try:
             result: subprocess.CompletedProcess[str] = subprocess.run(op_command.split(), capture_output=True, text=True, check=True)
@@ -178,10 +180,6 @@ class Configuration:
         arg_parser.add_argument("--version", dest="version", type=bool, help="Show version", default=False)
         args: argparse.Namespace = arg_parser.parse_args(args=arguments)
 
-        if args.version:
-            import importlib.metadata
-            print(importlib.metadata.version(distribution_name='ttrsscli'))
-
         self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
         try:
             self.api_url: str = get_conf_value(op_command=self.config["ttrss"].get("api_url", ""))
@@ -195,6 +193,7 @@ class Configuration:
             self.obsidian_include_tags: bool = self.config["obsidian"].get("include_tags", "False")
             self.obsidian_include_labels: bool = self.config["obsidian"].get("include_labels", "True")
             self.obsidian_template: str = get_conf_value(op_command=self.config["obsidian"].get("template", ""))
+            self.version: str = metadata.version(distribution_name='ttrsscli')
         except KeyError as err:
             print(f"Error reading configuration: {err}")
             sys.exit(1)
@@ -378,6 +377,7 @@ class HelpScreen(Screen):
 - **G / ,**: Refresh
 - **c**: Clear content in article pane
 - **d**: Toggle dark and light mode
+- **v**: Show version
 
 ## Article keys
 - **H**: Toggle "header" (info) for article
@@ -449,6 +449,7 @@ class ttrsscli(App[None]):
         ("shift+tab", "focus_previous_pane", "Previous pane"),
         ("tab", "focus_next_pane", "Next pane"),
         ("u", "toggle_unread", "Show categories with unread articles"),
+        ("v", "show_version", "Show version"),
     ]
     SCREENS: ClassVar[dict[str, type[Screen]]] = {
         "help": HelpScreen,
@@ -776,6 +777,10 @@ class ttrsscli(App[None]):
             self.push_screen(screen=LinkSelectionScreen(configuration=self.configuration, links=self.current_article_urls, open_links="download"))
         else:
             self.notify(title="Save link", message="No article selected or no URLs available.", timeout=5, severity="warning")
+
+    def action_show_version(self) -> None:
+        """Show version."""
+        self.notify(title="Info", message=f"Version: {self.configuration.version}", timeout=5, severity="information")
 
     async def action_toggle_category(self) -> None:
         """Set expand category."""
