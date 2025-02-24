@@ -1225,6 +1225,7 @@ class ttrsscli(App[None]):
             articles: list[Headline] = self.client.get_headlines(
                 feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
             )
+            articles.sort(key=lambda article: article.feed_title) # type: ignore
             feed_title: str = ""
             for article in articles:
                 self.tags[article.id] = article.tags  # type: ignore
