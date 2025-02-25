@@ -302,7 +302,7 @@ class LinkSelectionScreen(ModalScreen):
         for link in self.links:
             longest_link = max(longest_link, len(link[0]), len(link[1]))
         link_select.styles.align_horizontal = "left"
-        link_select.styles.width = longest_link + 5
+        link_select.styles.width = longest_link + 6
         link_select.styles.max_width = "100%"
         yield link_select
 
