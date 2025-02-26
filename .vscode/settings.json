@@ -8,6 +8,8 @@
         "certifi",
         "cleanurl",
         "colorama",
+        "docstrings",
+        "doctests",
         "dotenv",
         "frozenlist",
         "httpcore",
