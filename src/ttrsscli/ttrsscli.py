@@ -452,6 +452,7 @@ class FullScreenTextArea(Screen):
 
     def on_key(self, event) -> None:
         """Close the full-screen TextArea on any key press."""
+        event.prevent_default()
         if event.key in ALLOW_IN_FULL_SCREEN:
             pass
         else:
@@ -511,6 +512,14 @@ For more about Tiny Tiny RSS, see the [Tiny Tiny RSS website](https://tt-rss.org
             show_table_of_contents=False,
             open_links=False,
         )
+
+    def on_key(self, event) -> None:
+        """Close the full-screen TextArea on any key press."""
+        event.prevent_default()
+        if event.key in ALLOW_IN_FULL_SCREEN:
+            pass
+        else:
+            self.app.pop_screen()
 
 
 # Main Textual App class
