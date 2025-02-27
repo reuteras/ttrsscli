@@ -650,7 +650,7 @@ ALLOW_IN_FULL_SCREEN: list[str] = [
 class ConfirmScreen(ModalScreen):
     """Modal screen for confirming actions like deletion."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         ("escape", "cancel", "Cancel"),
         ("enter", "confirm", "Confirm"),
     ]
@@ -701,7 +701,7 @@ class ConfirmScreen(ModalScreen):
 class AddFeedScreen(ModalScreen):
     """Modal screen for adding a new feed."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         ("escape", "close_screen", "Close"),
         ("enter", "add_feed", "Add Feed"),
     ]
@@ -842,7 +842,7 @@ class AddFeedScreen(ModalScreen):
             
             if result and hasattr(result, 'status') and result.status:
                 self.notify(
-                    message=f"Feed added successfully", 
+                    message="Feed added successfully", 
                     title="Success"
                 )
                 self.dismiss(result=True)
@@ -874,7 +874,7 @@ class AddFeedScreen(ModalScreen):
 class EditFeedScreen(ModalScreen):
     """Modal screen for editing feed properties."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         ("escape", "close_screen", "Close"),
         ("enter", "save_feed", "Save"),
         ("delete", "delete_feed", "Delete Feed"),
@@ -1147,7 +1147,7 @@ class EditFeedScreen(ModalScreen):
 class SearchScreen(ModalScreen):
     """Modal screen for searching articles."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         ("escape", "close_screen", "Close"),
         ("enter", "search", "Search"),
     ]
@@ -1192,7 +1192,7 @@ class SearchScreen(ModalScreen):
 class LinkSelectionScreen(ModalScreen):
     """Modal screen to show extracted links and allow selection."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         ("escape", "cancel", "Cancel"),
         ("enter", "select", "Select"),
     ]
@@ -1894,9 +1894,9 @@ class ttrsscli(App[None]):
             
             # Try to get feed details
             for category in self.client.get_categories():
-                for feed in self.client.get_feeds(cat_id=category.id, unread_only=False):
-                    if feed.id == feed_id:
-                        feed_title = feed.title
+                for feed in self.client.get_feeds(cat_id=category.id, unread_only=False):  # type: ignore
+                    if feed.id == feed_id:  # type: ignore
+                        feed_title = feed.title  # type: ignore
                         feed_url = getattr(feed, 'feed_url', '')
                         break
         
@@ -2092,7 +2092,8 @@ class ttrsscli(App[None]):
         encoded_content: str = quote(string=content)
 
         # Check if content is too long for a URI
-        if len(encoded_content) > 8000:  # URI length limit is around 8192
+        max_url_length: int = 8000  # URI length limit is around 8192
+        if len(encoded_content) > max_url_length:
             self.notify(
                 title="Obsidian",
                 message="Content too large for URI. Creating temporary file...",
