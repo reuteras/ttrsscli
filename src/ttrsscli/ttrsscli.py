@@ -21,7 +21,7 @@ from importlib import metadata
 from pathlib import Path
 from time import sleep
 from typing import Any, ClassVar, Literal
-from urllib.parse import quote, urlparse
+from urllib.parse import ParseResult, quote, urlparse
 
 import httpx
 import toml
@@ -59,11 +59,11 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("ttrsscli.log"),
+        logging.FileHandler(filename="ttrsscli.log"),
         logging.StreamHandler(),
     ],
 )
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 
 class LimitedSizeDict(OrderedDict):
@@ -107,16 +107,16 @@ def get_conf_value(op_command: str) -> str:
     if op_command.startswith("op "):
         try:
             result: subprocess.CompletedProcess[str] = subprocess.run(
-                op_command.split(), capture_output=True, text=True, check=True
+                args=op_command.split(), capture_output=True, text=True, check=True
             )
             return result.stdout.strip()
         except subprocess.CalledProcessError as err:
-            logger.error(f"Error executing command '{op_command}': {err}")
+            logger.error(msg=f"Error executing command '{op_command}': {err}")
             print(f"Error executing command '{op_command}': {err}")
             sys.exit(1)
         except FileNotFoundError:
             logger.error(
-                "Error: 'op' command not found. Ensure 1Password CLI is installed and accessible."
+                msg="Error: 'op' command not found. Ensure 1Password CLI is installed and accessible."
             )
             print(
                 "Error: 'op' command not found. Ensure 1Password CLI is installed and accessible."
@@ -150,26 +150,26 @@ def handle_session_expiration(api_method):
                 return api_method(self, *args, **kwargs)
             except ConnectionResetError as err:
                 logger.warning(
-                    f"Connection reset: {err}. Retrying ({retry_count + 1}/{max_retries})..."
+                    msg=f"Connection reset: {err}. Retrying ({retry_count + 1}/{max_retries})..."
                 )
                 retry_count += 1
                 sleep(1)
 
                 # Re-login
                 if not self.login():
-                    logger.error("Re-authentication failed after connection reset")
+                    logger.error(msg="Re-authentication failed after connection reset")
                     raise RuntimeError("Re-authentication failed") from err
             except Exception as err:
                 if "NOT_LOGGED_IN" in str(object=err):
                     logger.warning(
-                        f"Session expired: {err}. Retrying ({retry_count + 1}/{max_retries})..."
+                        msg=f"Session expired: {err}. Retrying ({retry_count + 1}/{max_retries})..."
                     )
                     retry_count += 1
 
                     # Re-login
                     if not self.login():
                         logger.error(
-                            "Re-authentication failed after session expiration"
+                            msg="Re-authentication failed after session expiration"
                         )
                         raise RuntimeError("Re-authentication failed") from err
                 else:
@@ -177,7 +177,7 @@ def handle_session_expiration(api_method):
                     raise
 
         # If we've exhausted our retries
-        logger.error(f"Failed after {max_retries} retries")
+        logger.error(msg=f"Failed after {max_retries} retries")
         raise RuntimeError(f"Failed after {max_retries} retries")
 
     return wrapper
@@ -213,7 +213,7 @@ class TTRSSClient:
             self.api.login()
             return True
         except Exception as e:
-            logger.error(f"Login failed: {e}")
+            logger.error(msg=f"Login failed: {e}")
             return False
 
     @handle_session_expiration
@@ -226,11 +226,11 @@ class TTRSSClient:
         Returns:
             List of articles
         """
-        cache_key = f"article_{article_id}"
+        cache_key: str = f"article_{article_id}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        articles = self.api.get_articles(article_id=article_id)
+        articles: list[Article] = self.api.get_articles(article_id=article_id)
         self.cache[cache_key] = articles
         return articles
 
@@ -245,7 +245,7 @@ class TTRSSClient:
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        categories = self.api.get_categories()
+        categories: list[Category] = self.api.get_categories()
         self.cache[cache_key] = categories
         return categories
 
@@ -264,7 +264,7 @@ class TTRSSClient:
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        feeds = self.api.get_feeds(cat_id=cat_id, unread_only=unread_only)
+        feeds: list[Feed] = self.api.get_feeds(cat_id=cat_id, unread_only=unread_only)
         self.cache[cache_key] = feeds
         return feeds
 
@@ -280,11 +280,11 @@ class TTRSSClient:
         Returns:
             List of headlines
         """
-        cache_key = f"headlines_{feed_id}_{is_cat}_{view_mode}"
+        cache_key: str = f"headlines_{feed_id}_{is_cat}_{view_mode}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        headlines = self.api.get_headlines(
+        headlines: list[Headline] = self.api.get_headlines(
             feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
         )
         self.cache[cache_key] = headlines
@@ -337,7 +337,7 @@ class TTRSSClient:
             del self.cache[f"article_{article_id}"]
         self._invalidate_headline_cache()
 
-    def _invalidate_headline_cache(self):
+    def _invalidate_headline_cache(self) -> None:
         """Invalidate all headline cache entries."""
         keys_to_remove = [k for k in self.cache if k.startswith("headlines_")]
         for key in keys_to_remove:
@@ -393,12 +393,12 @@ class Configuration:
         args: argparse.Namespace = arg_parser.parse_args(args=arguments)
 
         if args.debug:
-            logger.setLevel(logging.DEBUG)
-            logger.debug("Debug mode enabled")
+            logger.setLevel(level=logging.DEBUG)
+            logger.debug(msg="Debug mode enabled")
 
         if args.version:
             try:
-                version = metadata.version(distribution_name="ttrsscli")
+                version: str = metadata.version(distribution_name="ttrsscli")
                 print(f"ttrsscli version: {version}")
                 sys.exit(0)
             except Exception as e:
@@ -422,7 +422,7 @@ class Configuration:
             self.download_folder: Path = Path(
                 get_conf_value(
                     op_command=general_config.get(
-                        "download_folder", os.path.expanduser("~/Downloads")
+                        "download_folder", os.path.expanduser(path="~/Downloads")
                     )
                 )
             )
@@ -462,7 +462,7 @@ class Configuration:
 
             self.version: str = metadata.version(distribution_name="ttrsscli")
         except KeyError as err:
-            logger.error(f"Error reading configuration: {err}")
+            logger.error(msg=f"Error reading configuration: {err}")
             print(f"Error reading configuration: {err}")
             sys.exit(1)
 
@@ -488,7 +488,7 @@ class Configuration:
                     print(
                         f"Config file {config_file} not found. Creating from default."
                     )
-                    config_path.write_text(default_config_path.read_text())
+                    config_path.write_text(data=default_config_path.read_text())
                     print(
                         f"Created {config_file} from default. Please edit it with your settings."
                     )
@@ -496,9 +496,9 @@ class Configuration:
                     print(f"Neither {config_file} nor {default_config_path} found.")
                     sys.exit(1)
 
-            return toml.loads(config_path.read_text())
+            return toml.loads(s=config_path.read_text())
         except (FileNotFoundError, toml.TomlDecodeError) as err:
-            logger.error(f"Error reading configuration file: {err}")
+            logger.error(msg=f"Error reading configuration file: {err}")
             print(f"Error reading configuration file: {err}")
             sys.exit(1)
 
@@ -529,16 +529,16 @@ class SearchScreen(ModalScreen):
     def __init__(self) -> None:
         """Initialize the search screen."""
         super().__init__()
-        self.search_term = ""
+        self.search_term: str = ""
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the search screen."""
         with Container(id="search-container"):
-            yield Label("Search Articles", id="search-title")
+            yield Label(renderable="Search Articles", id="search-title")
             yield Input(placeholder="Enter search term...", id="search-input")
             with Horizontal(id="search-buttons"):
-                yield Button("Search", id="search-button")
-                yield Button("Cancel", id="cancel-button")
+                yield Button(label="Search", id="search-button")
+                yield Button(label="Cancel", id="cancel-button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
@@ -554,9 +554,9 @@ class SearchScreen(ModalScreen):
     def action_search(self) -> None:
         """Search for articles with the current search term."""
         if self.search_term:
-            self.dismiss(self.search_term)
+            self.dismiss(result=self.search_term)
         else:
-            self.notify("Please enter a search term", title="Search")
+            self.notify(message="Please enter a search term", title="Search")
 
     def action_close_screen(self) -> None:
         """Close the search screen."""
@@ -603,13 +603,13 @@ class LinkSelectionScreen(ModalScreen):
 
         # Handle empty links list
         if not self.links:
-            yield Label("No links found in article")
+            yield Label(renderable="No links found in article")
             return
 
         # Create a list view with all links
         link_select = ListView(
             *[
-                ListItem(Label(renderable=self._format_link_item(link)))
+                ListItem(Label(renderable=self._format_link_item(link=link)))
                 for link in self.links
             ],
             id="link-list",
@@ -658,16 +658,16 @@ class LinkSelectionScreen(ModalScreen):
         if len(url) > max_line_length:
             # Try to keep the domain and part of the path
             try:
-                parsed = urlparse(url)
-                domain = parsed.netloc
-                path = parsed.path
+                parsed: ParseResult = urlparse(url=url)
+                domain: str = parsed.netloc
+                path: str = parsed.path
 
                 if len(domain) + 10 >= max_line_length:  # If domain itself is very long
-                    url = domain[: max_line_length - 3] + "..."
+                    url: str = domain[: max_line_length - 3] + "..."
                 else:
                     # Keep domain and truncate path
-                    path_max = max_line_length - len(domain) - 10
-                    path_truncated = (
+                    path_max: int = max_line_length - len(domain) - 10
+                    path_truncated: str = (
                         path[:path_max] + "..." if len(path) > path_max else path
                     )
                     url = f"{domain}{path_truncated}"
@@ -683,7 +683,7 @@ class LinkSelectionScreen(ModalScreen):
 
     def action_select(self) -> None:
         """Process the selected link."""
-        link_list = self.query_one("#link-list", ListView)
+        link_list: ListView = self.query_one(selector="#link-list", expect_type=ListView)
         if link_list.index is None or not self.links:
             self.notify(
                 title="Error", message="No link selected", timeout=3, severity="error"
@@ -692,7 +692,7 @@ class LinkSelectionScreen(ModalScreen):
             return
 
         try:
-            index = link_list.index
+            index: int = link_list.index
             if index < 0 or index >= len(self.links):
                 self.notify(
                     title="Error",
@@ -714,10 +714,10 @@ class LinkSelectionScreen(ModalScreen):
                 self.app.pop_screen()
                 return
 
-            self._process_link(link)
+            self._process_link(link=link)
             self.app.pop_screen()
         except Exception as e:
-            logger.error(f"Error processing selection: {e}")
+            logger.error(msg=f"Error processing selection: {e}")
             self.notify(
                 title="Error", message=f"Error: {e!s}", timeout=3, severity="error"
             )
@@ -735,7 +735,7 @@ class LinkSelectionScreen(ModalScreen):
         elif self.open_links == "download":
             self.download_file(link=link)
         elif self.open_links == "readwise":
-            self._save_to_readwise(link)
+            self._save_to_readwise(link=link)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle list view selection.
@@ -750,12 +750,12 @@ class LinkSelectionScreen(ModalScreen):
                 if index is not None and 0 <= index < len(self.links):
                     link = self.links[index][1]
                     if link:
-                        self._process_link(link)
+                        self._process_link(link=link)
 
             # Close the screen
             self.app.pop_screen()
         except Exception as e:
-            logger.error(f"Error handling link selection: {e}")
+            logger.error(msg=f"Error handling link selection: {e}")
             self.notify(
                 title="Error", message=f"Error: {e!s}", timeout=3, severity="error"
             )
@@ -769,16 +769,16 @@ class LinkSelectionScreen(ModalScreen):
         """
         try:
             # Extract filename from URL
-            filename = Path(urlparse(link).path).name
+            filename: str = Path(urlparse(url=link).path).name
             if not filename:
                 filename = "downloaded_file"
 
             # Download the file
             download_path = self.configuration.download_folder / filename
             
-            with self.http_client.stream("GET", link) as response:
+            with self.http_client.stream(method="GET", url=link) as response:
                 response.raise_for_status()
-                with open(download_path, "wb") as f:
+                with open(file=download_path, mode="wb") as f:
                     for chunk in response.iter_bytes():
                         f.write(chunk)
                         
@@ -788,7 +788,7 @@ class LinkSelectionScreen(ModalScreen):
                 timeout=5,
             )
         except httpx.HTTPError as e:
-            logger.error(f"HTTP error downloading file: {e}")
+            logger.error(msg=f"HTTP error downloading file: {e}")
             self.notify(
                 title="Download Error",
                 message=f"HTTP error downloading file: {e!s}",
@@ -796,7 +796,7 @@ class LinkSelectionScreen(ModalScreen):
                 severity="error",
             )
         except Exception as e:
-            logger.error(f"Error downloading file: {e}")
+            logger.error(msg=f"Error downloading file: {e}")
             self.notify(
                 title="Download Error",
                 message=f"Error downloading file: {e!s}",
@@ -844,7 +844,7 @@ class LinkSelectionScreen(ModalScreen):
             if isinstance(self.screen, ProgressScreen):
                 self.pop_screen()
 
-            logger.error(f"Error saving to Readwise: {err}")
+            logger.error(msg=f"Error saving to Readwise: {err}")
             self.notify(
                 title="Readwise",
                 message=f"Error: {err!s}",
@@ -858,7 +858,7 @@ class ProgressScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the progress screen."""
-        yield Static("Working...", id="progress-text")
+        yield Static(content="Working...", id="progress-text")
         yield ProgressBar(total=100, id="progress-bar")
 
 
@@ -1075,15 +1075,15 @@ class ttrsscli(App[None]):
                 password=self.configuration.password,
             )
         except TTRNotLoggedIn:
-            logger.error("Could not log in to Tiny Tiny RSS. Check your credentials.")
+            logger.error(msg="Could not log in to Tiny Tiny RSS. Check your credentials.")
             print("Error: Could not log in to Tiny Tiny RSS. Check your credentials.")
             sys.exit(1)
         except NameResolutionError:
-            logger.error("Couldn't look up server for url.")
+            logger.error(msg="Couldn't look up server for url.")
             print("Error: Couldn't look up server for url.")
             sys.exit(1)
         except Exception as e:
-            logger.error(f"Unexpected error: {e}")
+            logger.error(msg=f"Unexpected error: {e}")
             print(f"Error: {e}")
             sys.exit(1)
 
@@ -1188,8 +1188,8 @@ class ttrsscli(App[None]):
                     self.selected_article_ids.add(article_id)
                     await self.display_article_content(article_id=article_id)
         except Exception as err:
-            logger.error(f"Error handling list view highlight: {err}")
-            self.notify(f"Error: {err}", title="Error", severity="error")
+            logger.error(msg=f"Error handling list view highlight: {err}")
+            self.notify(message=f"Error: {err}", title="Error", severity="error")
             
     async def on_list_view_selected(self, message: Message) -> None:
         """Called when an item is selected in the ListView."""
@@ -1219,8 +1219,8 @@ class ttrsscli(App[None]):
                     self.selected_article_ids.add(article_id)
                     await self.display_article_content(article_id=article_id)
         except Exception as err:
-            logger.error(f"Error handling list view selection: {err}")
-            self.notify(f"Error: {err}", title="Error", severity="error")
+            logger.error(msg=f"Error handling list view selection: {err}")
+            self.notify(message=f"Error: {err}", title="Error", severity="error")
 
     async def on_mount(self) -> None:
         """Fetch and display categories on startup."""
@@ -1253,7 +1253,7 @@ class ttrsscli(App[None]):
             from readwise.model import PostResponse
 
             # Show a progress indicator during the API call
-            self.push_screen("progress")
+            self.push_screen(screen="progress")
 
             # Save to Readwise
             response: tuple[bool, PostResponse] = readwise.save_document(
@@ -1283,7 +1283,7 @@ class ttrsscli(App[None]):
             if isinstance(self.screen, ProgressScreen):
                 self.pop_screen()
 
-            logger.error(f"Error saving to Readwise: {err}")
+            logger.error(msg=f"Error saving to Readwise: {err}")
             self.notify(
                 title="Readwise",
                 message=f"Error: {err!s}",
@@ -1318,7 +1318,7 @@ class ttrsscli(App[None]):
         )
         await content_view.document.update(markdown=self.content_markdown)
 
-    def action_export_to_obsidian(self) -> None:
+    def action_export_to_obsidian(self) -> None:  # noqa: PLR0912, PLR0915
         """Send the current content as a new note to Obsidian via URI scheme."""
         if not self.configuration.obsidian_vault:
             self.notify(
@@ -1358,14 +1358,14 @@ class ttrsscli(App[None]):
         content = content.replace("<TITLE>", self.current_article_title)
 
         # Build tags
-        tags = self.configuration.obsidian_default_tag + "  \n"
+        tags: str = self.configuration.obsidian_default_tag + "  \n"
         article_labels = ""
         article_tags = ""
 
         if self.show_header and self.configuration.obsidian_include_labels:
             try:
                 article_labels = (
-                    f"  - {', '.join(item[1] for item in self.current_article.labels)}"
+                    f"  - {', '.join(item[1] for item in self.current_article.labels)}" # type: ignore
                     if getattr(self.current_article, "labels", None)
                     else ""
                 )
@@ -1375,7 +1375,7 @@ class ttrsscli(App[None]):
         if self.show_header and self.configuration.obsidian_include_tags:
             try:
                 article_tags = "\n".join(
-                    f"  - {item}" for item in self.tags.get(self.current_article.id, [])
+                    f"  - {item}" for item in self.tags.get(self.current_article.id, [])  # type: ignore
                 )
             except (KeyError, TypeError):
                 article_tags = ""
@@ -1400,7 +1400,7 @@ class ttrsscli(App[None]):
             # Create a temporary file instead
             try:
                 temp_path = Path(tempfile.mktemp(suffix='.md'))
-                temp_path.write_text(content, encoding='utf-8')
+                temp_path.write_text(data=content, encoding='utf-8')
                 
                 self.temp_files.append(temp_path)  # Track for cleanup
 
@@ -1422,12 +1422,12 @@ class ttrsscli(App[None]):
                 if sys.platform == "win32":
                     os.startfile(temp_path)
                 elif sys.platform == "darwin":
-                    subprocess.call(["open", str(temp_path)])
+                    subprocess.call(args=["open", str(object=temp_path)])
                 else:  # Linux and other Unix-like
                     subprocess.call(["xdg-open", str(temp_path)])
 
             except Exception as e:
-                logger.error(f"Error creating temporary file: {e}")
+                logger.error(msg=f"Error creating temporary file: {e}")
                 self.notify(
                     title="Obsidian",
                     message=f"Error creating temporary file: {e}",
@@ -1555,7 +1555,7 @@ class ttrsscli(App[None]):
             # Fetch the full article
             articles: list[Article] = self.client.get_articles(article_id=article_id)
         except Exception as err:
-            logger.error(f"Error fetching article content: {err}")
+            logger.error(msg=f"Error fetching article content: {err}")
             self.notify(
                 title="Article",
                 message=f"Error fetching article content: {err}",
@@ -1583,14 +1583,14 @@ class ttrsscli(App[None]):
             self.current_article_title: str = article.title  # type: ignore
 
             # Extract and process images if any
-            for img in soup.find_all("img"):
+            for img in soup.find_all(name="img"):
                 if img.get("src"):
                     # Replace with a placeholder or a note about the image
-                    img_text = f"[Image: {img.get('alt', 'No description')}]"
-                    img.replace_with(soup.new_string(img_text))
+                    img_text: str = f"[Image: {img.get('alt', 'No description')}]"
+                    img.replace_with(soup.new_string(s=img_text))
 
             # Extract URLs from article content
-            self.current_article_urls = self._extract_article_urls(soup)
+            self.current_article_urls = self._extract_article_urls(soup=soup)
 
             # Convert HTML to markdown
             self.content_markdown_original: str = markdownify(
@@ -1599,7 +1599,7 @@ class ttrsscli(App[None]):
 
             # Clean up the markdown for better readability
             self.content_markdown_original = self._clean_markdown(
-                self.content_markdown_original
+                markdown_text=self.content_markdown_original
             )
 
             # Add header information if enabled
@@ -1617,7 +1617,7 @@ class ttrsscli(App[None]):
                 self.client.mark_read(article_id=article_id)
                 await self.refresh_categories()
         except Exception as e:
-            logger.error(f"Error processing article content: {e}")
+            logger.error(msg=f"Error processing article content: {e}")
             self.notify(
                 title="Error",
                 message=f"Error processing article: {e!s}",
@@ -1715,21 +1715,21 @@ class ttrsscli(App[None]):
     async def action_refresh(self) -> None:
         """Refresh categories and articles from the server."""
         self.client.clear_cache()  # Clear cache to force fresh data
-        self.notify("Refreshing data from server...", title="Refresh")
+        self.notify(message="Refreshing data from server...", title="Refresh")
         await self.refresh_categories()
         await self.refresh_articles()
-        self.notify("Refresh complete", title="Refresh")
+        self.notify(message="Refresh complete", title="Refresh")
 
     async def action_search(self) -> None:
         """Search for articles."""
-        search_term = await self.push_screen_wait("search")
+        search_term = await self.push_screen_wait(screen="search")
         if search_term:
-            self.notify(f"Searching for: {search_term}", title="Search")
+            self.notify(message=f"Searching for: {search_term}", title="Search")
             # Implement search functionality here
             # This would require extending the Tiny Tiny RSS client
             # For now, just show a notification
             self.notify(
-                f"Search functionality is not fully implemented yet. Would search for: {search_term}",
+                message=f"Search functionality is not fully implemented yet. Would search for: {search_term}",
                 title="Search",
             )
             
@@ -1753,10 +1753,10 @@ class ttrsscli(App[None]):
 
     def action_show_version(self) -> None:
         """Show version information."""
-        version_info = (
+        version_info: str = (
             f"ttrsscli version: {self.configuration.version}\n"
             f"Python: {sys.version.split()[0]}\n"
-            f"Textual: {metadata.version('textual')}"
+            f"Textual: {metadata.version(distribution_name='textual')}"
         )
         self.notify(
             title="Version Info",
@@ -1787,8 +1787,8 @@ class ttrsscli(App[None]):
     async def action_toggle_header(self) -> None:
         """Toggle header info for article."""
         self.show_header = not self.show_header
-        if self.current_article and self.current_article.id:
-            await self.display_article_content(article_id=self.current_article.id)
+        if self.current_article and self.current_article.id:  # type: ignore
+            await self.display_article_content(article_id=self.current_article.id)  # type: ignore
 
     async def action_toggle_feeds(self) -> None:
         """Toggle feed grouping."""
@@ -1807,9 +1807,9 @@ class ttrsscli(App[None]):
         if hasattr(self, "article_id") and self.article_id:
             try:
                 self.client.toggle_unread(article_id=self.article_id)
-                self.notify("Article status toggled", title="Info")
+                self.notify(message="Article status toggled", title="Info")
             except Exception as e:
-                logger.error(f"Error toggling article status: {e}")
+                logger.error(msg=f"Error toggling article status: {e}")
                 self.notify(
                     title="Error",
                     message=f"Failed to toggle article status: {e!s}",
@@ -1839,9 +1839,9 @@ class ttrsscli(App[None]):
         if hasattr(self, "article_id") and self.article_id:
             try:
                 self.client.toggle_starred(article_id=self.article_id)
-                self.notify("Article star status toggled", title="Info")
+                self.notify(message="Article star status toggled", title="Info")
             except Exception as e:
-                logger.error(f"Error toggling star status: {e}")
+                logger.error(msg=f"Error toggling star status: {e}")
                 self.notify(
                     title="Error",
                     message=f"Failed to toggle star status: {e!s}",
@@ -1881,10 +1881,10 @@ class ttrsscli(App[None]):
         # Replace multiple consecutive blank lines with a single one
         import re
 
-        markdown_text = re.sub(r"\n{3,}", "\n\n", markdown_text)
+        markdown_text = re.sub(pattern=r"\n{3,}", repl="\n\n", string=markdown_text)
 
         # Wrap very long lines for better readability
-        lines = markdown_text.split("\n")
+        lines: list[str] = markdown_text.split(sep="\n")
         wrapped_lines = []
 
         for line in lines:
@@ -1901,7 +1901,7 @@ class ttrsscli(App[None]):
                 wrapped_lines.append(line)
             else:
                 # Wrap long text lines
-                wrapped = textwrap.fill(line, width=100)
+                wrapped: str = textwrap.fill(text=line, width=100)
                 wrapped_lines.append(wrapped)
 
         return "\n".join(wrapped_lines)
@@ -1924,7 +1924,7 @@ class ttrsscli(App[None]):
                 if cleaned_url:
                     return cleaned_url.url
             except Exception as e:
-                logger.debug(f"Error cleaning URL {url}: {e}")
+                logger.debug(msg=f"Error cleaning URL {url}: {e}")
 
         return url
 
@@ -1961,8 +1961,8 @@ class ttrsscli(App[None]):
 
         # Add labels if available
         try:
-            if hasattr(article, "labels") and article.labels:
-                labels = ", ".join(item[1] for item in article.labels)
+            if hasattr(article, "labels") and article.labels:  # type: ignore
+                labels: str = ", ".join(item[1] for item in article.labels)  # type: ignore
                 if labels:
                     header_items.append(f"> **Labels:** {labels}  ")
         except (AttributeError, TypeError):
@@ -1970,25 +1970,25 @@ class ttrsscli(App[None]):
 
         # Add tags if available
         try:
-            article_tags = self.tags.get(article.id, [])
+            article_tags = self.tags.get(article.id, [])  # type: ignore
             if article_tags and len(article_tags[0]) > 0:
-                tags = ", ".join(article_tags)
+                tags: str = ", ".join(article_tags)
                 header_items.append(f"> **Tags:** {tags}  ")
         except (KeyError, IndexError, TypeError):
             pass
 
         # Add starred status
-        if hasattr(article, "marked") and article.marked:
-            header_items.append(f"> **Starred:** {article.marked}  ")
+        if hasattr(article, "marked") and article.marked:  # type: ignore
+            header_items.append(f"> **Starred:** {article.marked}  ")  # type: ignore
 
         # Combine all header items and add a separator
-        header = "\n".join(header_items)
+        header: str = "\n".join(header_items)
         if header:
             header += "\n\n"
 
         return header
 
-    async def refresh_articles(self, show_id=None) -> None:
+    async def refresh_articles(self, show_id=None) -> None:  # noqa: PLR0912, PLR0915
         """Load articles from selected category or feed.
 
         Args:
@@ -2086,7 +2086,7 @@ class ttrsscli(App[None]):
                 await self.action_clear()
 
         except Exception as err:
-            logger.error(f"Error fetching articles: {err}")
+            logger.error(msg=f"Error fetching articles: {err}")
             self.notify(
                 title="Articles",
                 message=f"Error fetching articles: {err}",
@@ -2113,7 +2113,7 @@ class ttrsscli(App[None]):
 
             if categories:
                 # Sort categories by title
-                sorted_categories = sorted(categories, key=lambda x: x.title)  # type: ignore
+                sorted_categories: list[Category] = sorted(categories, key=lambda x: x.title)  # type: ignore
 
                 for category in sorted_categories:
                     # Skip categories with no unread articles if unread-only mode is enabled and special categories are hidden
@@ -2179,8 +2179,8 @@ class ttrsscli(App[None]):
                                     item=ListItem(
                                         Static(
                                             content="  "
-                                            + feed.title
-                                            + feed_unread_count  # type: ignore
+                                            + feed.title # type: ignore
+                                            + feed_unread_count
                                         ),
                                         id=feed_id,
                                     )
@@ -2201,7 +2201,7 @@ class ttrsscli(App[None]):
             list_view.styles.width = estimated_width
 
         except Exception as err:
-            logger.error(f"Error refreshing categories: {err}")
+            logger.error(msg=f"Error refreshing categories: {err}")
             self.notify(
                 title="Categories",
                 message=f"Error refreshing categories: {err}",
@@ -2217,7 +2217,7 @@ class ttrsscli(App[None]):
                 if temp_file.exists():
                     temp_file.unlink()
             except Exception as e:
-                logger.error(f"Error removing temporary file {temp_file}: {e}")
+                logger.error(msg=f"Error removing temporary file {temp_file}: {e}")
                 
         # Close the HTTP client
         if hasattr(self, 'http_client'):
@@ -2233,7 +2233,7 @@ def main() -> None:
         # Handle Ctrl+C gracefully
         print("\nExiting ttrsscli...")
     except Exception as e:
-        logger.error(f"Unhandled exception: {e}")
+        logger.error(msg=f"Unhandled exception: {e}")
         print(f"Error: {e}")
         print("See ttrsscli.log for details")
         sys.exit(1)
