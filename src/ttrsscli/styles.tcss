@@ -1,5 +1,6 @@
-/* styles.tcss */
+/* styles.tcss - Simplified styling for ttrsscli */
 
+/* Header styling */
 Header {
     background: darkblue;
     color: white;
@@ -7,20 +8,80 @@ Header {
     content-align: center top;
 }
 
+/* Dialog and modal screens */
+#search-container {
+    width: 60%;
+    height: auto;
+    border: tall $primary;
+    background: $surface;
+    padding: 1 2;
+    margin: 1 2;
+}
+
+#search-title {
+    text-align: center;
+    width: 100%;
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#search-input {
+    margin-bottom: 1;
+}
+
+#search-buttons {
+    width: 100%;
+    height: auto;
+    align: center middle;
+}
+
+Button {
+    margin: 1 2;
+}
+
+ProgressBar {
+    width: 50;
+    margin: 1 2;
+}
+
+#progress-text {
+    text-align: center;
+    margin-bottom: 1;
+}
+
+/* Option list styling */
 OptionList {
     align: center middle;
 }
 
-/* Style for the categories ListView */
+/* Categories pane styling */
 #categories {
-    width: 1fr; /* Flexible width */
-    max-width: 50%; /* Maximum width of 30% */
+    width: 1fr;
+    max-width: 40%;
 }
 
-/* Style for the articles ListView */
+/* Articles pane styling */
 #articles {
-    height: auto; /* Automatic height */
-    max-height: 40%; /* Maximum height of 40% */
+    height: auto;
     min-height: 10;
-    margin-bottom: 1;  /* Space below the article list */
+    max-height: 40%;
+    margin-bottom: 1;
+}
+
+/* Content pane styling */
+#content {
+    overflow-y: auto;
+    padding: 0 1;
+}
+
+/* ListView styling */
+ListView {
+    border: none;
+}
+
+/* Link selection screen styling */
+LinkSelectionScreen ListView {
+    margin: 1 0;
+    max-height: 20;
+    overflow-y: auto;
 }

@@ -4,6 +4,7 @@ __pycache__/
 build/
 config.toml
 dist/
+ttrsscli.log
 wheels/
 *.egg-info
 

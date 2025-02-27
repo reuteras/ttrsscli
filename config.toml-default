@@ -1,15 +1,30 @@
 [general]
+# Path to download folder (required for saving files)
 download_folder = "/Users/<username>/Downloads"
+# Whether to automatically mark articles as read when opened
+auto_mark_read = true
+# Size of the cache for storing article metadata
+cache_size = 10000
+# Default theme (dark or light)
+default_theme = "dark"
+
 [ttrss]
+# Tiny Tiny RSS API endpoint - can use op command for 1Password integration
 api_url = "op read op://Private/ttrss/url --no-newline"
 username = "op read op://Private/ttrss/login --no-newline"
 password = "op read op://Private/ttrss/API --no-newline"
+
 [readwise]
+# Readwise API token - can use op command for 1Password integration
 token = "op read op://Private/Readwise/API_TOKEN --no-newline"
+
 [obsidian]
+# Obsidian integration settings
 vault = "Zettelkasten"
 folder = "News"
 default_tag = "type/news"
+include_tags = true
+include_labels = true
 template = """
 ---
 id: <ID>
