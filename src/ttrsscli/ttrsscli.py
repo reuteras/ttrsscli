@@ -13,16 +13,17 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-import urllib
 import webbrowser
 from collections import OrderedDict
 from collections.abc import Generator
 from datetime import datetime
 from importlib import metadata
+from pathlib import Path
 from time import sleep
 from typing import Any, ClassVar, Literal
 from urllib.parse import quote, urlparse
 
+import httpx
 import toml
 from bs4 import BeautifulSoup
 from cleanurl import Result, cleanurl
@@ -418,9 +419,11 @@ class Configuration:
 
             # Get general settings with defaults
             general_config = self.config.get("general", {})
-            self.download_folder: str = get_conf_value(
-                op_command=general_config.get(
-                    "download_folder", os.path.expanduser("~/Downloads")
+            self.download_folder: Path = Path(
+                get_conf_value(
+                    op_command=general_config.get(
+                        "download_folder", os.path.expanduser("~/Downloads")
+                    )
                 )
             )
             self.auto_mark_read: bool = general_config.get("auto_mark_read", True)
@@ -455,7 +458,7 @@ class Configuration:
             )
 
             # Make sure download folder exists
-            os.makedirs(self.download_folder, exist_ok=True)
+            self.download_folder.mkdir(parents=True, exist_ok=True)
 
             self.version: str = metadata.version(distribution_name="ttrsscli")
         except KeyError as err:
@@ -475,24 +478,25 @@ class Configuration:
         Raises:
             SystemExit: If the config file cannot be read
         """
+        config_path = Path(config_file)
+        default_config_path = Path("config.toml-default")
+        
         try:
-            if not os.path.exists(config_file):
+            if not config_path.exists():
                 # If config file doesn't exist, try to use default config
-                default_config = "config.toml-default"
-                if os.path.exists(default_config):
+                if default_config_path.exists():
                     print(
                         f"Config file {config_file} not found. Creating from default."
                     )
-                    with open(default_config) as src, open(config_file, "w") as dst:
-                        dst.write(src.read())
+                    config_path.write_text(default_config_path.read_text())
                     print(
                         f"Created {config_file} from default. Please edit it with your settings."
                     )
                 else:
-                    print(f"Neither {config_file} nor {default_config} found.")
+                    print(f"Neither {config_file} nor {default_config_path} found.")
                     sys.exit(1)
 
-            return toml.load(f=config_file)
+            return toml.loads(config_path.read_text())
         except (FileNotFoundError, toml.TomlDecodeError) as err:
             logger.error(f"Error reading configuration file: {err}")
             print(f"Error reading configuration file: {err}")
@@ -582,6 +586,7 @@ class LinkSelectionScreen(ModalScreen):
         self.open: bool = open
         self.configuration: Configuration = configuration
         self.selected_index = 0
+        self.http_client = httpx.Client(follow_redirects=True)
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the link selection screen."""
@@ -757,24 +762,38 @@ class LinkSelectionScreen(ModalScreen):
             self.app.pop_screen()
 
     def download_file(self, link: str) -> None:
-        """Download a file from the given URL.
+        """Download a file from the given URL using httpx.
 
         Args:
             link: URL to download
         """
         try:
             # Extract filename from URL
-            filename = link.split("/")[-1]
+            filename = Path(urlparse(link).path).name
             if not filename:
                 filename = "downloaded_file"
 
             # Download the file
-            download_path = os.path.join(self.configuration.download_folder, filename)
-            urllib.request.urlretrieve(link, download_path)
+            download_path = self.configuration.download_folder / filename
+            
+            with self.http_client.stream("GET", link) as response:
+                response.raise_for_status()
+                with open(download_path, "wb") as f:
+                    for chunk in response.iter_bytes():
+                        f.write(chunk)
+                        
             self.notify(
                 title="Downloaded",
                 message=f"File downloaded to {download_path}",
                 timeout=5,
+            )
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error downloading file: {e}")
+            self.notify(
+                title="Download Error",
+                message=f"HTTP error downloading file: {e!s}",
+                timeout=5,
+                severity="error",
             )
         except Exception as e:
             logger.error(f"Error downloading file: {e}")
@@ -1098,8 +1117,11 @@ class ttrsscli(App[None]):
         self.show_unread_only = reactive(default=True)
         self.show_special_categories: bool = False
         self.tags = LimitedSizeDict(max_size=self.configuration.cache_size)
-        self.temp_files: list[str] = []  # List of temporary files to clean up on exit
-
+        self.temp_files: list[Path] = []  # List of temporary files to clean up on exit
+        
+        # Create httpx client for downloads
+        self.http_client = httpx.Client(follow_redirects=True)
+        
     def compose(self) -> ComposeResult:
         """Compose the three pane layout."""
         yield Header(show_clock=True, name=f"ttrsscli v{self.configuration.version}")
@@ -1168,7 +1190,7 @@ class ttrsscli(App[None]):
         except Exception as err:
             logger.error(f"Error handling list view highlight: {err}")
             self.notify(f"Error: {err}", title="Error", severity="error")
-
+            
     async def on_list_view_selected(self, message: Message) -> None:
         """Called when an item is selected in the ListView."""
         selected_item: Any = message.item  # type: ignore
@@ -1204,7 +1226,7 @@ class ttrsscli(App[None]):
         """Fetch and display categories on startup."""
         await self.refresh_categories()
         await self.refresh_articles()
-
+        
     def action_add_to_later_app(self, open=False) -> None:
         """Add article to Readwise."""
         if not self.configuration.readwise_token:
@@ -1272,7 +1294,7 @@ class ttrsscli(App[None]):
     def action_add_to_later_app_and_open(self) -> None:
         """Add article to Readwise and open that Readwise page in browser."""
         self.action_add_to_later_app(open=True)
-
+        
     async def action_clear(self) -> None:
         """Clear content window."""
         self.content_markdown = self.START_TEXT
@@ -1362,7 +1384,7 @@ class ttrsscli(App[None]):
         content = content.replace("<TAGS>", tags)
         content = content.replace("  - \n", "")
         content = content.replace("\n\n", "\n")
-
+        
         # Encode title and content for URL format
         encoded_title: str = quote(string=title).replace("/", "%2F")
         encoded_content: str = quote(string=content)
@@ -1377,12 +1399,9 @@ class ttrsscli(App[None]):
 
             # Create a temporary file instead
             try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w", delete=False, suffix=".md", encoding="utf-8"
-                ) as temp:
-                    temp.write(content)
-                    temp_path = temp.name
-
+                temp_path = Path(tempfile.mktemp(suffix='.md'))
+                temp_path.write_text(content, encoding='utf-8')
+                
                 self.temp_files.append(temp_path)  # Track for cleanup
 
                 # Open Obsidian with the file path
@@ -1403,9 +1422,9 @@ class ttrsscli(App[None]):
                 if sys.platform == "win32":
                     os.startfile(temp_path)
                 elif sys.platform == "darwin":
-                    subprocess.call(["open", temp_path])
+                    subprocess.call(["open", str(temp_path)])
                 else:  # Linux and other Unix-like
-                    subprocess.call(["xdg-open", temp_path])
+                    subprocess.call(["xdg-open", str(temp_path)])
 
             except Exception as e:
                 logger.error(f"Error creating temporary file: {e}")
@@ -1423,7 +1442,7 @@ class ttrsscli(App[None]):
             # Open the Obsidian URI
             webbrowser.open(url=obsidian_uri)
             self.notify(message=f"Sent to Obsidian: {title}", title="Export Successful")
-
+            
     def action_focus_next_pane(self) -> None:
         """Move focus to the next pane."""
         panes: list[str] = ["categories", "articles", "content"]
@@ -1453,7 +1472,7 @@ class ttrsscli(App[None]):
         self.push_screen(
             screen=FullScreenMarkdown(markdown_content=self.content_markdown)
         )
-
+        
     def action_next_article(self) -> None:
         """Open next article."""
         self.last_key = "j"
@@ -1499,7 +1518,7 @@ class ttrsscli(App[None]):
             )
         else:
             self.notify(message="No links found in article", title="Info")
-
+            
     def _extract_article_urls(self, soup):
         """Extract URLs from article content.
 
@@ -1605,7 +1624,7 @@ class ttrsscli(App[None]):
                 timeout=5,
                 severity="error",
             )
-
+            
     def action_previous_article(self) -> None:
         """Open previous article."""
         self.last_key = "k"
@@ -1662,7 +1681,7 @@ class ttrsscli(App[None]):
                 open_links="readwise",
             )
         )
-
+        
     def action_readwise_article_url_and_open(self) -> None:
         """Add one article link to Readwise and open in browser."""
         if not self.configuration.readwise_token:
@@ -1713,7 +1732,7 @@ class ttrsscli(App[None]):
                 f"Search functionality is not fully implemented yet. Would search for: {search_term}",
                 title="Search",
             )
-
+            
     def action_save_article_url(self) -> None:
         """Save selected link from article to download folder."""
         if hasattr(self, "current_article_urls") and self.current_article_urls:
@@ -1758,7 +1777,7 @@ class ttrsscli(App[None]):
             self.notify(message="Clean URLs enabled", title="Info")
         else:
             self.notify(message="Clean URLs disabled", title="Info")
-
+            
     def action_toggle_dark(self) -> None:
         """Toggle dark mode."""
         self.theme = (
@@ -1804,7 +1823,7 @@ class ttrsscli(App[None]):
                 timeout=5,
                 severity="warning",
             )
-
+            
     async def action_toggle_special_categories(self) -> None:
         """Toggle special categories."""
         self.show_special_categories = not self.show_special_categories
@@ -1849,7 +1868,7 @@ class ttrsscli(App[None]):
             self.pop_screen()
         else:
             self.push_screen(screen=FullScreenTextArea(text=str(self.content_markdown)))
-
+            
     def _clean_markdown(self, markdown_text: str) -> str:
         """Clean up markdown text for better readability.
 
@@ -2074,7 +2093,7 @@ class ttrsscli(App[None]):
                 timeout=5,
                 severity="error",
             )
-
+            
     async def refresh_categories(self) -> None:
         """Load categories from TTRSS and filter based on unread-only mode."""
         try:
@@ -2195,10 +2214,14 @@ class ttrsscli(App[None]):
         # Clean up any temporary files
         for temp_file in self.temp_files:
             try:
-                if os.path.exists(temp_file):
-                    os.unlink(temp_file)
+                if temp_file.exists():
+                    temp_file.unlink()
             except Exception as e:
                 logger.error(f"Error removing temporary file {temp_file}: {e}")
+                
+        # Close the HTTP client
+        if hasattr(self, 'http_client'):
+            self.http_client.close()
 
 
 def main() -> None:
