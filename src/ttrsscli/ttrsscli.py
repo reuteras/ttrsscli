@@ -38,6 +38,7 @@ from textual.screen import ModalScreen, Screen
 from textual.widget import Widget
 from textual.widgets import (
     Button,
+    Checkbox,
     Footer,
     Header,
     Input,
@@ -337,6 +338,135 @@ class TTRSSClient:
             del self.cache[f"article_{article_id}"]
         self._invalidate_headline_cache()
 
+    @handle_session_expiration
+    def subscribe_to_feed(self, feed_url, category_id=0, feed_title=None, login=None, password=None) -> Any:
+        """Subscribe to a new feed.
+        
+        Args:
+            feed_url: URL of the feed to subscribe to
+            category_id: Category ID to place the feed in (default: 0 - Uncategorized)
+            feed_title: Custom title for the feed (optional)
+            login: Username for password-protected feeds (optional)
+            password: Password for password-protected feeds (optional)
+            
+        Returns:
+            API response object with status and message
+        """
+        params = {
+            "op": "subscribeToFeed",
+            "feed_url": feed_url,
+            "category_id": category_id
+        }
+        
+        # Add optional parameters if provided
+        if feed_title:
+            params["feed_title"] = feed_title
+        if login:
+            params["login"] = login
+        if password:
+            params["password"] = password
+            
+        response = self.api.send_request(params=params)
+        
+        # Clear relevant cache entries
+        self._invalidate_headline_cache()
+        
+        # The response should contain status and message fields
+        return response
+
+    @handle_session_expiration
+    def unsubscribe_feed(self, feed_id) -> Any:
+        """Unsubscribe from a feed (delete it).
+        
+        Args:
+            feed_id: ID of the feed to unsubscribe from
+            
+        Returns:
+            API response object with status
+        """
+        params = {
+            "op": "unsubscribeFeed",
+            "feed_id": feed_id
+        }
+        
+        response = self.api.send_request(params=params)
+        
+        # Clear relevant cache entries
+        self._invalidate_headline_cache()
+        
+        return response
+
+    @handle_session_expiration
+    def get_feed_properties(self, feed_id) -> Any:
+        """Get properties for a specific feed.
+        
+        Args:
+            feed_id: ID of the feed
+            
+        Returns:
+            API response object with feed properties
+        """
+        cache_key = f"feed_properties_{feed_id}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+            
+        params = {
+            "op": "getFeeds",
+            "feed_id": feed_id,
+            "include_nested": False
+        }
+        
+        response = self.api.send_request(params=params)
+        
+        # The response should be a list with one feed
+        if response and isinstance(response, list) and len(response) > 0:
+            feed_props = response[0]
+            self.cache[cache_key] = feed_props
+            return feed_props
+        
+        return None
+
+    @handle_session_expiration
+    def update_feed_properties(self, feed_id, title=None, category_id=None, **kwargs) -> Any:
+        """Update properties for a specific feed.
+        
+        Args:
+            feed_id: ID of the feed to update
+            title: New title for the feed (optional)
+            category_id: New category ID for the feed (optional)
+            **kwargs: Additional properties to update (e.g., update_enabled, include_in_digest)
+            
+        Returns:
+            API response object with status
+        """
+        params = {
+            "op": "updateFeed",
+            "feed_id": feed_id
+        }
+        
+        # Add optional parameters if provided
+        if title:
+            params["feed_title"] = title
+        if category_id is not None:
+            params["category_id"] = category_id
+        
+        # Add additional properties from kwargs
+        for key, value in kwargs.items():
+            # Convert to 1/0 for boolean values
+            if isinstance(value, bool):
+                params[key] = 1 if value else 0
+            else:
+                params[key] = value
+        
+        response = self.api.send_request(params=params)
+        
+        # Clear relevant cache entries
+        if f"feed_properties_{feed_id}" in self.cache:
+            del self.cache[f"feed_properties_{feed_id}"]
+        self._invalidate_headline_cache()
+        
+        return response
+
     def _invalidate_headline_cache(self) -> None:
         """Invalidate all headline cache entries."""
         keys_to_remove = [k for k in self.cache if k.startswith("headlines_")]
@@ -515,6 +645,502 @@ ALLOW_IN_FULL_SCREEN: list[str] = [
     "left",
     "enter",
 ]
+
+
+class ConfirmScreen(ModalScreen):
+    """Modal screen for confirming actions like deletion."""
+
+    BINDINGS = [
+        ("escape", "cancel", "Cancel"),
+        ("enter", "confirm", "Confirm"),
+    ]
+
+    def __init__(self, title="Confirm", message="Are you sure?", on_confirm=None) -> None:
+        """Initialize the confirmation screen.
+        
+        Args:
+            title: Title of the confirmation dialog
+            message: Message to display
+            on_confirm: Callback function to run on confirmation
+        """
+        super().__init__()
+        self.dialog_title = title
+        self.message = message
+        self.on_confirm = on_confirm
+
+    def compose(self) -> ComposeResult:
+        """Define the content layout of the confirmation screen."""
+        with Container(id="confirm-container"):
+            yield Label(renderable=self.dialog_title, id="confirm-title")
+            yield Label(renderable=self.message, id="confirm-message")
+            with Horizontal(id="confirm-buttons"):
+                yield Button(label="Confirm", id="confirm-button", variant="error")
+                yield Button(label="Cancel", id="cancel-button")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "confirm-button":
+            self.action_confirm()
+        elif event.button.id == "cancel-button":
+            self.action_cancel()
+
+    def action_confirm(self) -> None:
+        """Confirm the action and call the callback."""
+        # Pop this screen first
+        self.app.pop_screen()
+        
+        # Call the callback if provided
+        if self.on_confirm:
+            self.on_confirm()
+
+    def action_cancel(self) -> None:
+        """Cancel the action."""
+        self.app.pop_screen()
+
+
+class AddFeedScreen(ModalScreen):
+    """Modal screen for adding a new feed."""
+
+    BINDINGS = [
+        ("escape", "close_screen", "Close"),
+        ("enter", "add_feed", "Add Feed"),
+    ]
+
+    def __init__(self, client, category_id=None) -> None:
+        """Initialize the add feed screen.
+        
+        Args:
+            client: TTRSS client
+            category_id: Optional category ID to add the feed to
+        """
+        super().__init__()
+        self.client = client
+        self.category_id = category_id
+        self.feed_url = ""
+        self.feed_name = ""
+        self.login_user = ""
+        self.login_pass = ""
+        self.categories = []
+        self.selected_category = category_id
+        self._loading = False
+
+    def compose(self) -> ComposeResult:
+        """Define the content layout of the add feed screen."""
+        with Container(id="feed-container"):
+            yield Label(renderable="Add New Feed", id="feed-title")
+            yield Input(placeholder="Feed URL (required)", id="feed-url-input")
+            yield Input(placeholder="Feed Title (optional)", id="feed-title-input")
+            yield Input(placeholder="Login username (if required)", id="login-user-input")
+            yield Input(
+                password=True, 
+                placeholder="Login password (if required)", 
+                id="login-pass-input"
+            )
+            
+            # Category selection dropdown
+            yield Label(renderable="Category:")
+            yield ListView(id="category-list")
+            
+            # Progress indicator (hidden initially via CSS)
+            with Vertical(id="progress-container"):
+                yield ProgressBar(total=100, id="add-progress-bar")
+            
+            with Horizontal(id="feed-buttons"):
+                yield Button(label="Add Feed", id="add-button")
+                yield Button(label="Cancel", id="cancel-button")
+
+    def on_mount(self) -> None:
+        """Set initial visibility and fetch categories."""
+        # Hide progress bar initially
+        progress_container = self.query_one("#progress-container", Vertical)
+        progress_container.styles.display = "none"
+        
+        # Fetch categories
+        self._fetch_categories()
+        
+    def _fetch_categories(self) -> None:
+        """Fetch categories for the dropdown."""
+        try:
+            # Fetch categories for the dropdown
+            categories = self.client.get_categories()
+            category_list = self.query_one("#category-list", ListView)
+            
+            for category in sorted(categories, key=lambda x: x.title):
+                if category.title != "Special":  # Skip special category
+                    item = ListItem(Label(category.title), id=f"cat_{category.id}")
+                    category_list.append(item)
+                    self.categories.append((category.id, category.title))
+            
+            # Select the provided category if any
+            if self.category_id is not None:
+                for i, (cat_id, _) in enumerate(self.categories):
+                    if cat_id == self.category_id:
+                        category_list.index = i
+                        break
+        except Exception as e:
+            self.notify(
+                title="Error", 
+                message=f"Failed to load categories: {e}", 
+                severity="error"
+            )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "add-button":
+            self.action_add_feed()
+        elif event.button.id == "cancel-button":
+            self.action_close_screen()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Update variables when input changes."""
+        if event.input.id == "feed-url-input":
+            self.feed_url = event.value
+        elif event.input.id == "feed-title-input":
+            self.feed_name = event.value
+        elif event.input.id == "login-user-input":
+            self.login_user = event.value
+        elif event.input.id == "login-pass-input":
+            self.login_pass = event.value
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Handle category selection."""
+        if event.list_view.id == "category-list" and event.list_view.index is not None:
+            self.selected_category = self.categories[event.list_view.index][0]
+
+    def action_add_feed(self) -> None:
+        """Add a new feed with the provided details."""
+        if not self.feed_url:
+            self.notify(
+                message="Please enter a feed URL", 
+                title="Required Field",
+                severity="warning"
+            )
+            return
+
+        try:
+            # Show progress indicator
+            progress_container = self.query_one("#progress-container", Vertical)
+            progress_container.styles.display = "block"
+            self._loading = True
+            
+            # Prepare authentication if provided
+            auth_login = self.login_user if self.login_user else None
+            auth_pass = self.login_pass if self.login_pass else None
+            
+            # Add the feed
+            result = self.client.subscribe_to_feed(
+                feed_url=self.feed_url,
+                category_id=self.selected_category,
+                feed_title=self.feed_name if self.feed_name else None,
+                login=auth_login,
+                password=auth_pass
+            )
+            
+            # Hide progress indicator
+            progress_container.styles.display = "none"
+            self._loading = False
+            
+            if result and hasattr(result, 'status') and result.status:
+                self.notify(
+                    message=f"Feed added successfully", 
+                    title="Success"
+                )
+                self.dismiss(result=True)
+            else:
+                self.notify(
+                    message=f"Failed to add feed: {getattr(result, 'message', 'Unknown error')}", 
+                    title="Error",
+                    severity="error"
+                )
+        except Exception as e:
+            # Hide progress indicator if there's an error
+            if self._loading:
+                progress_container = self.query_one("#progress-container", Vertical)
+                progress_container.styles.display = "none"
+                self._loading = False
+                
+            logger.error(msg=f"Error adding feed: {e}")
+            self.notify(
+                message=f"Error adding feed: {e}", 
+                title="Error",
+                severity="error"
+            )
+
+    def action_close_screen(self) -> None:
+        """Close the screen."""
+        self.dismiss(result=False)
+
+
+class EditFeedScreen(ModalScreen):
+    """Modal screen for editing feed properties."""
+
+    BINDINGS = [
+        ("escape", "close_screen", "Close"),
+        ("enter", "save_feed", "Save"),
+        ("delete", "delete_feed", "Delete Feed"),
+    ]
+
+    def __init__(self, client, feed_id, title="", url="") -> None:
+        """Initialize the edit feed screen.
+        
+        Args:
+            client: TTRSS client
+            feed_id: Feed ID to edit
+            title: Current feed title
+            url: Current feed URL
+        """
+        super().__init__()
+        self.client = client
+        self.feed_id = feed_id
+        self.current_title = title
+        self.current_url = url
+        self.feed_title = title
+        self.categories = []
+        self.selected_category = None
+        self.current_category_id = None
+        self.feed_details = None
+        self._loading = False
+
+    def compose(self) -> ComposeResult:
+        """Define the content layout of the edit feed screen."""
+        with Container(id="feed-container"):
+            yield Label(renderable="Edit Feed", id="feed-title")
+            yield Input(placeholder="Feed Title", id="feed-title-input", value=self.current_title)
+            
+            # Feed URL (disabled, for display only)
+            yield Label(renderable="Feed URL:")
+            yield Input(placeholder="Feed URL", id="feed-url-input", value=self.current_url, disabled=True)
+            
+            # Category selection dropdown
+            yield Label(renderable="Category:")
+            yield ListView(id="category-list")
+            
+            # Feed settings
+            yield Label(renderable="Settings:")
+            
+            with Vertical(id="settings-container"):
+                yield Static("Loading feed settings...")
+            
+            # Progress indicator (hidden using display property)
+            with Vertical(id="progress-container"):
+                yield ProgressBar(total=100, id="edit-progress-bar")
+            
+            with Horizontal(id="feed-buttons"):
+                yield Button(label="Save Changes", id="save-button", variant="primary")
+                yield Button(label="Cancel", id="cancel-button")
+                yield Button(label="Delete Feed", id="delete-button", variant="error")
+
+    def on_mount(self) -> None:
+        """Set initial visibility of progress bar."""
+        # Hide progress bar initially
+        progress_container = self.query_one("#progress-container", Vertical)
+        progress_container.styles.display = "none"
+
+    async def on_show(self) -> None:
+        """Fetch categories and feed details when screen is shown."""
+        try:
+            # Show progress indicator
+            self._loading = True
+            progress_container = self.query_one("#progress-container", Vertical)
+            progress_container.styles.display = "block"
+            
+            # Fetch categories for the dropdown
+            categories = self.client.get_categories()
+            category_list = self.query_one("#category-list", ListView)
+            
+            for category in sorted(categories, key=lambda x: x.title):
+                if category.title != "Special":  # Skip special category
+                    item = ListItem(Label(category.title), id=f"cat_{category.id}")
+                    category_list.append(item)
+                    self.categories.append((category.id, category.title))
+            
+            # Fetch feed details including current category
+            self.feed_details = self.client.get_feed_properties(feed_id=self.feed_id)
+            
+            if self.feed_details:
+                # Update feed values from details
+                if hasattr(self.feed_details, 'title'):
+                    self.current_title = self.feed_details.title
+                    self.feed_title = self.feed_details.title
+                    title_input = self.query_one("#feed-title-input", Input)
+                    title_input.value = self.current_title
+                
+                # Get current category
+                if hasattr(self.feed_details, 'cat_id'):
+                    self.current_category_id = self.feed_details.cat_id
+                    
+                    # Select the current category in the list
+                    for i, (cat_id, _) in enumerate(self.categories):
+                        if int(cat_id) == int(self.current_category_id):
+                            category_list.index = i
+                            self.selected_category = cat_id
+                            break
+                
+                # Display feed settings
+                settings_container = self.query_one("#settings-container", Vertical)
+                await settings_container.remove_children()
+                
+                # Add toggles for common feed settings
+                settings = [
+                    ("update-enabled", "Enable Updates", getattr(self.feed_details, 'update_enabled', True)),
+                    ("include-in-digest", "Include in Digest", getattr(self.feed_details, 'include_in_digest', True)),
+                    ("always-display-attachments", "Always Display Attachments", getattr(self.feed_details, 'always_display_attachments', False)),
+                    ("mark-unread-on-update", "Mark Unread on Update", getattr(self.feed_details, 'mark_unread_on_update', False)),
+                ]
+                
+                for setting_id, label, value in settings:
+                    setting_container = Horizontal()
+                    setting_container.id = f"setting-{setting_id}"
+                    checkbox = Checkbox(value=value, id=f"checkbox-{setting_id}")
+                    setting_container.append(checkbox)
+                    setting_container.append(Label(label))
+                    settings_container.append(setting_container)
+            
+            # Hide progress indicator
+            progress_container.styles.display = "none"
+            self._loading = False
+                
+        except Exception as e:
+            # Hide progress indicator if there's an error
+            if self._loading:
+                progress_container = self.query_one("#progress-container", Vertical)
+                progress_container.styles.display = "none"
+                self._loading = False
+                
+            logger.error(msg=f"Error loading feed details: {e}")
+            self.notify(
+                title="Error", 
+                message=f"Failed to load feed details: {e}", 
+                severity="error"
+            )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "save-button":
+            self.action_save_feed()
+        elif event.button.id == "cancel-button":
+            self.action_close_screen()
+        elif event.button.id == "delete-button":
+            self.action_confirm_delete()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Update variables when input changes."""
+        if event.input.id == "feed-title-input":
+            self.feed_title = event.value
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Handle category selection."""
+        if event.list_view.id == "category-list" and event.list_view.index is not None:
+            self.selected_category = self.categories[event.list_view.index][0]
+
+    def action_save_feed(self) -> None:
+        """Save the feed with updated properties."""
+        try:
+            # Show progress indicator
+            progress_container = self.query_one("#progress-container", Vertical)
+            progress_container.styles.display = "block"
+            self._loading = True
+            
+            # Collect settings from checkboxes
+            settings = {}
+            for setting_id in ["update-enabled", "include-in-digest", "always-display-attachments", "mark-unread-on-update"]:
+                checkbox = self.query_one(f"#checkbox-{setting_id}", Checkbox)
+                settings[setting_id.replace("-", "_")] = checkbox.value
+            
+            # Update the feed
+            result = self.client.update_feed_properties(
+                feed_id=self.feed_id,
+                title=self.feed_title,
+                category_id=self.selected_category,
+                **settings
+            )
+            
+            # Hide progress indicator
+            progress_container.styles.display = "none"
+            self._loading = False
+            
+            if result and getattr(result, 'status', False):
+                self.notify(
+                    message="Feed updated successfully", 
+                    title="Success"
+                )
+                self.dismiss(result=True)
+            else:
+                self.notify(
+                    message=f"Failed to update feed: {getattr(result, 'message', 'Unknown error')}", 
+                    title="Error",
+                    severity="error"
+                )
+        except Exception as e:
+            # Hide progress indicator if there's an error
+            if self._loading:
+                progress_container = self.query_one("#progress-container", Vertical)
+                progress_container.styles.display = "none"
+                self._loading = False
+                
+            logger.error(msg=f"Error updating feed: {e}")
+            self.notify(
+                message=f"Error updating feed: {e}", 
+                title="Error",
+                severity="error"
+            )
+
+    def action_confirm_delete(self) -> None:
+        """Show confirmation dialog before deleting feed."""
+        # We'll show a simple confirm dialog within this screen
+        # instead of pushing a new screen
+        self.app.push_screen(
+            ConfirmScreen(
+                title="Delete Feed",
+                message=f"Are you sure you want to delete the feed '{self.current_title}'?",
+                on_confirm=self.delete_feed
+            )
+        )
+        
+    def delete_feed(self) -> None:
+        """Delete the feed after confirmation."""
+        try:
+            # Show progress indicator
+            progress_container = self.query_one("#progress-container", Vertical)
+            progress_container.styles.display = "block"
+            self._loading = True
+            
+            # Delete the feed
+            result = self.client.unsubscribe_feed(feed_id=self.feed_id)
+            
+            # Hide progress indicator
+            progress_container.styles.display = "none"
+            self._loading = False
+            
+            if result and getattr(result, 'status', False):
+                self.notify(
+                    message="Feed deleted successfully", 
+                    title="Success"
+                )
+                self.dismiss(result={"action": "deleted", "feed_id": self.feed_id})
+            else:
+                self.notify(
+                    message=f"Failed to delete feed: {getattr(result, 'message', 'Unknown error')}", 
+                    title="Error",
+                    severity="error"
+                )
+        except Exception as e:
+            # Hide progress indicator if there's an error
+            if self._loading:
+                progress_container = self.query_one("#progress-container", Vertical)
+                progress_container.styles.display = "none"
+                self._loading = False
+                
+            logger.error(msg=f"Error deleting feed: {e}")
+            self.notify(
+                message=f"Error deleting feed: {e}", 
+                title="Error",
+                severity="error"
+            )
+            
+    def action_close_screen(self) -> None:
+        """Close the screen."""
+        self.dismiss(result=False)
 
 
 # Textual Screen classes
@@ -959,6 +1585,10 @@ class HelpScreen(Screen):
 - **f**: Search articles
 - **v**: Show version
 
+## Feed Management
+- **a**: Add a new feed
+- **E**: Edit the selected feed (also allows deletion)
+
 ## Article keys
 - **H**: Toggle "header" (info) for article
 - **l**: Add article to Readwise
@@ -1007,6 +1637,7 @@ class ttrsscli(App[None]):
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("?", "toggle_help", "Help"),
+        ("a", "add_feed", "Add Feed"),
         ("C", "toggle_clean_url", "Toggle clean URLs"),
         ("c", "clear", "Clear"),
         ("comma", "refresh", "Refresh"),
@@ -1020,6 +1651,7 @@ class ttrsscli(App[None]):
         ("ctrl+s", "save_article_url", "Save link to downloads"),
         ("d", "toggle_dark", "Toggle dark mode"),
         ("e", "toggle_category", "Toggle category expansion"),
+        ("E", "edit_feed", "Edit Feed"),
         ("f", "search", "Search"),
         ("G", "refresh", "Refresh"),
         ("g", "toggle_feeds", "Group feeds"),
@@ -1050,6 +1682,9 @@ class ttrsscli(App[None]):
         "help": HelpScreen,
         "search": SearchScreen,
         "progress": ProgressScreen,
+        "add_feed": AddFeedScreen,
+        "edit_feed": EditFeedScreen,
+        "confirm": ConfirmScreen,
     }
     CSS_PATH: str = "styles.tcss"
 
@@ -1226,7 +1861,74 @@ class ttrsscli(App[None]):
         """Fetch and display categories on startup."""
         await self.refresh_categories()
         await self.refresh_articles()
+    
+    @work
+    async def action_add_feed(self) -> None:
+        """Open screen to add a new feed."""
+        # Determine if a category is selected
+        category_id = None
+        if hasattr(self, "category_id") and self.category_id and self.category_id.startswith("cat_"):
+            category_id = int(self.category_id.replace("cat_", ""))
         
+        # Create and push the add feed screen
+        add_feed_screen = AddFeedScreen(client=self.client, category_id=category_id)
+        result = await self.push_screen_wait(add_feed_screen)
+        
+        # Refresh if a feed was added
+        if result:
+            self.notify(message="Refreshing after adding feed...", title="Refresh")
+            await self.refresh_categories()
+            await self.refresh_articles()
+
+    @work
+    async def action_edit_feed(self) -> None:
+        """Open screen to edit the selected feed."""
+        # Check if a feed is selected
+        feed_id = None
+        feed_title = ""
+        feed_url = ""
+        
+        # Check if we're in the categories view with a feed selected
+        if hasattr(self, "category_id") and self.category_id and self.category_id.startswith("feed_"):
+            feed_id = int(self.category_id.replace("feed_", ""))
+            
+            # Try to get feed details
+            for category in self.client.get_categories():
+                for feed in self.client.get_feeds(cat_id=category.id, unread_only=False):
+                    if feed.id == feed_id:
+                        feed_title = feed.title
+                        feed_url = getattr(feed, 'feed_url', '')
+                        break
+        
+        # Or check if we have an article selected - use its feed info
+        elif self.current_article:
+            feed_id = getattr(self.current_article, 'feed_id', None)
+            feed_title = getattr(self.current_article, 'feed_title', '')
+            
+        if not feed_id:
+            self.notify(
+                message="Please select a feed to edit", 
+                title="Edit Feed",
+                severity="warning"
+            )
+            return
+        
+        # Create and push the edit feed screen
+        edit_feed_screen = EditFeedScreen(
+            client=self.client, 
+            feed_id=feed_id,
+            title=feed_title,
+            url=feed_url
+        )
+        result = await self.push_screen_wait(edit_feed_screen)
+        
+        # Refresh if feed was updated or deleted
+        if result:
+            self.notify(message="Refreshing after feed update...", title="Refresh")
+            await self.refresh_categories()
+            await self.refresh_articles()
+
+
     def action_add_to_later_app(self, open=False) -> None:
         """Add article to Readwise."""
         if not self.configuration.readwise_token:

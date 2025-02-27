@@ -85,3 +85,72 @@ LinkSelectionScreen ListView {
     max-height: 20;
     overflow-y: auto;
 }
+
+/* Feed management styles */
+#feed-container {
+    width: 60%;
+    height: auto;
+    border: tall $primary;
+    background: $surface;
+    padding: 1 2;
+    margin: 1 2;
+}
+
+#feed-title {
+    text-align: center;
+    width: 100%;
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#feed-url-input,
+#feed-title-input,
+#login-user-input,
+#login-pass-input {
+    margin-bottom: 1;
+}
+
+#category-list {
+    height: auto;
+    max-height: 10;
+    margin: 1 0;
+    overflow-y: auto;
+}
+
+#settings-container {
+    margin: 1 0;
+    max-height: 10;
+    overflow-y: auto;
+}
+
+#progress-container {
+    margin: 1 0;
+    width: 100%;
+}
+
+/* Confirmation dialog */
+#confirm-container {
+    width: 50%;
+    height: auto;
+    border: tall $error;
+    background: $surface;
+    padding: 1 2;
+    margin: 1 2;
+}
+
+#confirm-title {
+    text-align: center;
+    width: 100%;
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#confirm-message {
+    text-align: center;
+    width: 100%;
+    margin-bottom: 1;
+}
+
+#confirm-buttons {
+    align: center middle;
+}
