@@ -1,10 +1,10 @@
 """Test for ttrsscli module."""
+# ruff: noqa: PLR2004
+
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from ttrss.client import Article, Category, Feed, Headline
-
-from ttrsscli.ttrsscli import LimitedSizeDict, TTRSSClient, get_conf_value
+from ttrsscli.ttrsscli import LimitedSizeDict, get_conf_value
 
 
 class TestLimitedSizeDict:
@@ -154,9 +154,7 @@ class TestGetConfValue:
         """Test get_conf_value with NameResolutionError."""
         from urllib3.exceptions import NameResolutionError
 
-        mock_run.side_effect = NameResolutionError(
-            None, "mock_host", "mock_url"
-        )
+        mock_run.side_effect = NameResolutionError(None, "mock_host", "mock_url")
 
         op_command = "op read op://vault/item/field"
 
@@ -172,4 +170,3 @@ class TestGetConfValue:
         op_command = "plain_value"
         result: str = get_conf_value(op_command=op_command)
         assert result == "plain_value"
-
