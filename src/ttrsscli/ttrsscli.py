@@ -339,25 +339,32 @@ class TTRSSClient:
         self._invalidate_headline_cache()
 
     @handle_session_expiration
-    def subscribe_to_feed(self, feed_url, category_id=0, feed_title=None, login=None, password=None) -> Any:
+    def subscribe_to_feed(
+        self, feed_url, category_id=0, feed_title=None, login=None, password=None
+    ) -> Any:
         """Subscribe to a new feed.
-        
+
         Args:
             feed_url: URL of the feed to subscribe to
             category_id: Category ID to place the feed in (default: 0 - Uncategorized)
             feed_title: Custom title for the feed (optional)
             login: Username for password-protected feeds (optional)
             password: Password for password-protected feeds (optional)
-            
+
         Returns:
             API response object with status and message
         """
+        # Make sure we're logged in
+        if not self.api.sid:
+            self.login()
+
         params = {
             "op": "subscribeToFeed",
             "feed_url": feed_url,
-            "category_id": category_id
+            "category_id": category_id,
+            "sid": self.api.sid,
         }
-        
+
         # Add optional parameters if provided
         if feed_title:
             params["feed_title"] = feed_title
@@ -365,91 +372,115 @@ class TTRSSClient:
             params["login"] = login
         if password:
             params["password"] = password
-            
-        response = self.api.send_request(params=params)
-        
-        # Clear relevant cache entries
-        self._invalidate_headline_cache()
-        
-        # The response should contain status and message fields
-        return response
+
+        try:
+            # Send the request directly
+            response = self.api.send_request(params=params)
+
+            # Clear relevant cache entries
+            self._invalidate_headline_cache()
+
+            # The response should contain status and message fields
+            return response
+        except Exception as e:
+            logger.error(msg=f"Subscribe to feed failed: {e}")
+            raise
 
     @handle_session_expiration
     def unsubscribe_feed(self, feed_id) -> Any:
         """Unsubscribe from a feed (delete it).
-        
+
         Args:
             feed_id: ID of the feed to unsubscribe from
-            
+
         Returns:
             API response object with status
         """
-        params = {
-            "op": "unsubscribeFeed",
-            "feed_id": feed_id
-        }
-        
-        response = self.api.send_request(params=params)
-        
-        # Clear relevant cache entries
-        self._invalidate_headline_cache()
-        
-        return response
+        # Make sure we're logged in
+        if not self.api.sid:
+            self.login()
+
+        params = {"op": "unsubscribeFeed", "feed_id": feed_id, "sid": self.api.sid}
+
+        try:
+            # Send the request directly
+            response = self.api._query(params)
+
+            # Clear relevant cache entries
+            self._invalidate_headline_cache()
+
+            return response
+        except Exception as e:
+            logger.error(msg=f"Unsubscribe feed failed: {e}")
+            raise
 
     @handle_session_expiration
     def get_feed_properties(self, feed_id) -> Any:
         """Get properties for a specific feed.
-        
+
         Args:
             feed_id: ID of the feed
-            
+
         Returns:
             API response object with feed properties
         """
         cache_key = f"feed_properties_{feed_id}"
         if cache_key in self.cache:
             return self.cache[cache_key]
-            
+
+        # Make sure we're logged in
+        if not self.api.sid:
+            self.login()
+
         params = {
             "op": "getFeeds",
             "feed_id": feed_id,
-            "include_nested": False
+            "include_nested": False,
+            "sid": self.api.sid,
         }
-        
-        response = self.api.send_request(params=params)
-        
-        # The response should be a list with one feed
-        if response and isinstance(response, list) and len(response) > 0:
-            feed_props = response[0]
-            self.cache[cache_key] = feed_props
-            return feed_props
-        
-        return None
+
+        try:
+            # Send the request directly
+            response = self.api._query(params)
+
+            # The response should be a list with one feed
+            if response and isinstance(response, list) and len(response) > 0:
+                feed_props = response[0]
+                self.cache[cache_key] = feed_props
+                return feed_props
+
+            return None
+        except Exception as e:
+            logger.error(msg=f"Get feed properties failed: {e}")
+            raise
 
     @handle_session_expiration
-    def update_feed_properties(self, feed_id, title=None, category_id=None, **kwargs) -> Any:
+    def update_feed_properties(
+        self, feed_id, title=None, category_id=None, **kwargs
+    ) -> Any:
         """Update properties for a specific feed.
-        
+
         Args:
             feed_id: ID of the feed to update
             title: New title for the feed (optional)
             category_id: New category ID for the feed (optional)
             **kwargs: Additional properties to update (e.g., update_enabled, include_in_digest)
-            
+
         Returns:
             API response object with status
         """
-        params = {
-            "op": "updateFeed",
-            "feed_id": feed_id
-        }
-        
+        # Make sure we're logged in
+        if not self.api.sid:
+            self.login()
+
+        params = {"op": "updateFeed", "feed_id": feed_id, "sid": self.api.sid}
+
         # Add optional parameters if provided
         if title:
             params["feed_title"] = title
         if category_id is not None:
             params["category_id"] = category_id
-        
+
         # Add additional properties from kwargs
         for key, value in kwargs.items():
             # Convert to 1/0 for boolean values
@@ -457,15 +488,45 @@ class TTRSSClient:
                 params[key] = 1 if value else 0
             else:
                 params[key] = value
-        
-        response = self.api.send_request(params=params)
-        
-        # Clear relevant cache entries
-        if f"feed_properties_{feed_id}" in self.cache:
-            del self.cache[f"feed_properties_{feed_id}"]
-        self._invalidate_headline_cache()
-        
-        return response
+
+        try:
+            # Send the request directly
+            response = self.api._query(params)
+
+            # Clear relevant cache entries
+            if f"feed_properties_{feed_id}" in self.cache:
+                del self.cache[f"feed_properties_{feed_id}"]
+            self._invalidate_headline_cache()
+
+            return response
+        except Exception as e:
+            logger.error(msg=f"Update feed properties failed: {e}")
+            raise
+
+    @handle_session_expiration
+    def send_request(self, params: dict) -> Any:
+        """Send a request to the TTRSS API directly.
+
+        Args:
+            params: Dictionary of parameters to send to the API
+
+        Returns:
+            API response object
+        """
+        # Make sure we're logged in
+        if not self.api.sid:
+            self.login()
+
+        try:
+            # Add session ID to parameters
+            if "sid" not in params:
+                params["sid"] = self.api.sid
+
+            # Send the request using the underlying API
+            return self.api._query(params)
+        except Exception as e:
+            logger.error(msg=f"API request failed: {e}")
+            raise
 
     def _invalidate_headline_cache(self) -> None:
         """Invalidate all headline cache entries."""
@@ -610,7 +671,7 @@ class Configuration:
         """
         config_path = Path(config_file)
         default_config_path = Path("config.toml-default")
-        
+
         try:
             if not config_path.exists():
                 # If config file doesn't exist, try to use default config
@@ -655,9 +716,11 @@ class ConfirmScreen(ModalScreen):
         ("enter", "confirm", "Confirm"),
     ]
 
-    def __init__(self, title="Confirm", message="Are you sure?", on_confirm=None) -> None:
+    def __init__(
+        self, title="Confirm", message="Are you sure?", on_confirm=None
+    ) -> None:
         """Initialize the confirmation screen.
-        
+
         Args:
             title: Title of the confirmation dialog
             message: Message to display
@@ -688,7 +751,7 @@ class ConfirmScreen(ModalScreen):
         """Confirm the action and call the callback."""
         # Pop this screen first
         self.app.pop_screen()
-        
+
         # Call the callback if provided
         if self.on_confirm:
             self.on_confirm()
@@ -708,7 +771,7 @@ class AddFeedScreen(ModalScreen):
 
     def __init__(self, client, category_id=None) -> None:
         """Initialize the add feed screen.
-        
+
         Args:
             client: TTRSS client
             category_id: Optional category ID to add the feed to
@@ -730,21 +793,23 @@ class AddFeedScreen(ModalScreen):
             yield Label(renderable="Add New Feed", id="feed-title")
             yield Input(placeholder="Feed URL (required)", id="feed-url-input")
             yield Input(placeholder="Feed Title (optional)", id="feed-title-input")
-            yield Input(placeholder="Login username (if required)", id="login-user-input")
             yield Input(
-                password=True, 
-                placeholder="Login password (if required)", 
-                id="login-pass-input"
+                placeholder="Login username (if required)", id="login-user-input"
             )
-            
+            yield Input(
+                password=True,
+                placeholder="Login password (if required)",
+                id="login-pass-input",
+            )
+
             # Category selection dropdown
             yield Label(renderable="Category:")
             yield ListView(id="category-list")
-            
+
             # Progress indicator (hidden initially via CSS)
             with Vertical(id="progress-container"):
                 yield ProgressBar(total=100, id="add-progress-bar")
-            
+
             with Horizontal(id="feed-buttons"):
                 yield Button(label="Add Feed", id="add-button")
                 yield Button(label="Cancel", id="cancel-button")
@@ -754,23 +819,23 @@ class AddFeedScreen(ModalScreen):
         # Hide progress bar initially
         progress_container = self.query_one("#progress-container", Vertical)
         progress_container.styles.display = "none"
-        
+
         # Fetch categories
         self._fetch_categories()
-        
+
     def _fetch_categories(self) -> None:
         """Fetch categories for the dropdown."""
         try:
             # Fetch categories for the dropdown
             categories = self.client.get_categories()
             category_list = self.query_one("#category-list", ListView)
-            
+
             for category in sorted(categories, key=lambda x: x.title):
                 if category.title != "Special":  # Skip special category
                     item = ListItem(Label(category.title), id=f"cat_{category.id}")
                     category_list.append(item)
                     self.categories.append((category.id, category.title))
-            
+
             # Select the provided category if any
             if self.category_id is not None:
                 for i, (cat_id, _) in enumerate(self.categories):
@@ -779,9 +844,9 @@ class AddFeedScreen(ModalScreen):
                         break
         except Exception as e:
             self.notify(
-                title="Error", 
-                message=f"Failed to load categories: {e}", 
-                severity="error"
+                title="Error",
+                message=f"Failed to load categories: {e}",
+                severity="error",
             )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -805,15 +870,19 @@ class AddFeedScreen(ModalScreen):
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle category selection."""
         if event.list_view.id == "category-list" and event.list_view.index is not None:
-            self.selected_category = self.categories[event.list_view.index][0]
+            try:
+                self.selected_category = self.categories[event.list_view.index][0]
+            except IndexError:
+                # Handle case when the index is out of range
+                pass
 
     def action_add_feed(self) -> None:
         """Add a new feed with the provided details."""
         if not self.feed_url:
             self.notify(
-                message="Please enter a feed URL", 
+                message="Please enter a feed URL",
                 title="Required Field",
-                severity="warning"
+                severity="warning",
             )
             return
 
@@ -822,35 +891,37 @@ class AddFeedScreen(ModalScreen):
             progress_container = self.query_one("#progress-container", Vertical)
             progress_container.styles.display = "block"
             self._loading = True
-            
+
             # Prepare authentication if provided
             auth_login = self.login_user if self.login_user else None
             auth_pass = self.login_pass if self.login_pass else None
-            
+
             # Add the feed
             result = self.client.subscribe_to_feed(
                 feed_url=self.feed_url,
                 category_id=self.selected_category,
                 feed_title=self.feed_name if self.feed_name else None,
                 login=auth_login,
-                password=auth_pass
+                password=auth_pass,
             )
-            
+
             # Hide progress indicator
             progress_container.styles.display = "none"
             self._loading = False
-            
-            if result and hasattr(result, 'status') and result.status:
-                self.notify(
-                    message="Feed added successfully", 
-                    title="Success"
-                )
+
+            if result and hasattr(result, "status") and result.status:
+                self.notify(message="Feed added successfully", title="Success")
                 self.dismiss(result=True)
             else:
+                error_msg = (
+                    getattr(result, "message", "Unknown error")
+                    if result
+                    else "Unknown error"
+                )
                 self.notify(
-                    message=f"Failed to add feed: {getattr(result, 'message', 'Unknown error')}", 
+                    message=f"Failed to add feed: {error_msg}",
                     title="Error",
-                    severity="error"
+                    severity="error",
                 )
         except Exception as e:
             # Hide progress indicator if there's an error
@@ -858,12 +929,10 @@ class AddFeedScreen(ModalScreen):
                 progress_container = self.query_one("#progress-container", Vertical)
                 progress_container.styles.display = "none"
                 self._loading = False
-                
+
             logger.error(msg=f"Error adding feed: {e}")
             self.notify(
-                message=f"Error adding feed: {e}", 
-                title="Error",
-                severity="error"
+                message=f"Error adding feed: {e}", title="Error", severity="error"
             )
 
     def action_close_screen(self) -> None:
@@ -882,7 +951,7 @@ class EditFeedScreen(ModalScreen):
 
     def __init__(self, client, feed_id, title="", url="") -> None:
         """Initialize the edit feed screen.
-        
+
         Args:
             client: TTRSS client
             feed_id: Feed ID to edit
@@ -905,26 +974,35 @@ class EditFeedScreen(ModalScreen):
         """Define the content layout of the edit feed screen."""
         with Container(id="feed-container"):
             yield Label(renderable="Edit Feed", id="feed-title")
-            yield Input(placeholder="Feed Title", id="feed-title-input", value=self.current_title)
-            
+            yield Input(
+                placeholder="Feed Title",
+                id="feed-title-input",
+                value=self.current_title,
+            )
+
             # Feed URL (disabled, for display only)
             yield Label(renderable="Feed URL:")
-            yield Input(placeholder="Feed URL", id="feed-url-input", value=self.current_url, disabled=True)
-            
+            yield Input(
+                placeholder="Feed URL",
+                id="feed-url-input",
+                value=self.current_url,
+                disabled=True,
+            )
+
             # Category selection dropdown
             yield Label(renderable="Category:")
             yield ListView(id="category-list")
-            
+
             # Feed settings
             yield Label(renderable="Settings:")
-            
+
             with Vertical(id="settings-container"):
                 yield Static("Loading feed settings...")
-            
+
             # Progress indicator (hidden using display property)
             with Vertical(id="progress-container"):
                 yield ProgressBar(total=100, id="edit-progress-bar")
-            
+
             with Horizontal(id="feed-buttons"):
                 yield Button(label="Save Changes", id="save-button", variant="primary")
                 yield Button(label="Cancel", id="cancel-button")
@@ -943,51 +1021,67 @@ class EditFeedScreen(ModalScreen):
             self._loading = True
             progress_container = self.query_one("#progress-container", Vertical)
             progress_container.styles.display = "block"
-            
+
             # Fetch categories for the dropdown
             categories = self.client.get_categories()
             category_list = self.query_one("#category-list", ListView)
-            
+
             for category in sorted(categories, key=lambda x: x.title):
                 if category.title != "Special":  # Skip special category
                     item = ListItem(Label(category.title), id=f"cat_{category.id}")
                     category_list.append(item)
                     self.categories.append((category.id, category.title))
-            
+
             # Fetch feed details including current category
             self.feed_details = self.client.get_feed_properties(feed_id=self.feed_id)
-            
+
             if self.feed_details:
                 # Update feed values from details
-                if hasattr(self.feed_details, 'title'):
+                if hasattr(self.feed_details, "title"):
                     self.current_title = self.feed_details.title
                     self.feed_title = self.feed_details.title
                     title_input = self.query_one("#feed-title-input", Input)
                     title_input.value = self.current_title
-                
+
                 # Get current category
-                if hasattr(self.feed_details, 'cat_id'):
+                if hasattr(self.feed_details, "cat_id"):
                     self.current_category_id = self.feed_details.cat_id
-                    
+
                     # Select the current category in the list
                     for i, (cat_id, _) in enumerate(self.categories):
                         if int(cat_id) == int(self.current_category_id):
                             category_list.index = i
                             self.selected_category = cat_id
                             break
-                
+
                 # Display feed settings
                 settings_container = self.query_one("#settings-container", Vertical)
                 await settings_container.remove_children()
-                
+
                 # Add toggles for common feed settings
                 settings = [
-                    ("update-enabled", "Enable Updates", getattr(self.feed_details, 'update_enabled', True)),
-                    ("include-in-digest", "Include in Digest", getattr(self.feed_details, 'include_in_digest', True)),
-                    ("always-display-attachments", "Always Display Attachments", getattr(self.feed_details, 'always_display_attachments', False)),
-                    ("mark-unread-on-update", "Mark Unread on Update", getattr(self.feed_details, 'mark_unread_on_update', False)),
+                    (
+                        "update-enabled",
+                        "Enable Updates",
+                        getattr(self.feed_details, "update_enabled", True),
+                    ),
+                    (
+                        "include-in-digest",
+                        "Include in Digest",
+                        getattr(self.feed_details, "include_in_digest", True),
+                    ),
+                    (
+                        "always-display-attachments",
+                        "Always Display Attachments",
+                        getattr(self.feed_details, "always_display_attachments", False),
+                    ),
+                    (
+                        "mark-unread-on-update",
+                        "Mark Unread on Update",
+                        getattr(self.feed_details, "mark_unread_on_update", False),
+                    ),
                 ]
-                
+
                 for setting_id, label, value in settings:
                     setting_container = Horizontal()
                     setting_container.id = f"setting-{setting_id}"
@@ -995,23 +1089,23 @@ class EditFeedScreen(ModalScreen):
                     setting_container.append(checkbox)
                     setting_container.append(Label(label))
                     settings_container.append(setting_container)
-            
+
             # Hide progress indicator
             progress_container.styles.display = "none"
             self._loading = False
-                
+
         except Exception as e:
             # Hide progress indicator if there's an error
             if self._loading:
                 progress_container = self.query_one("#progress-container", Vertical)
                 progress_container.styles.display = "none"
                 self._loading = False
-                
+
             logger.error(msg=f"Error loading feed details: {e}")
             self.notify(
-                title="Error", 
-                message=f"Failed to load feed details: {e}", 
-                severity="error"
+                title="Error",
+                message=f"Failed to load feed details: {e}",
+                severity="error",
             )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -1040,36 +1134,38 @@ class EditFeedScreen(ModalScreen):
             progress_container = self.query_one("#progress-container", Vertical)
             progress_container.styles.display = "block"
             self._loading = True
-            
+
             # Collect settings from checkboxes
             settings = {}
-            for setting_id in ["update-enabled", "include-in-digest", "always-display-attachments", "mark-unread-on-update"]:
+            for setting_id in [
+                "update-enabled",
+                "include-in-digest",
+                "always-display-attachments",
+                "mark-unread-on-update",
+            ]:
                 checkbox = self.query_one(f"#checkbox-{setting_id}", Checkbox)
                 settings[setting_id.replace("-", "_")] = checkbox.value
-            
+
             # Update the feed
             result = self.client.update_feed_properties(
                 feed_id=self.feed_id,
                 title=self.feed_title,
                 category_id=self.selected_category,
-                **settings
+                **settings,
             )
-            
+
             # Hide progress indicator
             progress_container.styles.display = "none"
             self._loading = False
-            
-            if result and getattr(result, 'status', False):
-                self.notify(
-                    message="Feed updated successfully", 
-                    title="Success"
-                )
+
+            if result and getattr(result, "status", False):
+                self.notify(message="Feed updated successfully", title="Success")
                 self.dismiss(result=True)
             else:
                 self.notify(
-                    message=f"Failed to update feed: {getattr(result, 'message', 'Unknown error')}", 
+                    message=f"Failed to update feed: {getattr(result, 'message', 'Unknown error')}",
                     title="Error",
-                    severity="error"
+                    severity="error",
                 )
         except Exception as e:
             # Hide progress indicator if there's an error
@@ -1077,12 +1173,10 @@ class EditFeedScreen(ModalScreen):
                 progress_container = self.query_one("#progress-container", Vertical)
                 progress_container.styles.display = "none"
                 self._loading = False
-                
+
             logger.error(msg=f"Error updating feed: {e}")
             self.notify(
-                message=f"Error updating feed: {e}", 
-                title="Error",
-                severity="error"
+                message=f"Error updating feed: {e}", title="Error", severity="error"
             )
 
     def action_confirm_delete(self) -> None:
@@ -1093,10 +1187,10 @@ class EditFeedScreen(ModalScreen):
             ConfirmScreen(
                 title="Delete Feed",
                 message=f"Are you sure you want to delete the feed '{self.current_title}'?",
-                on_confirm=self.delete_feed
+                on_confirm=self.delete_feed,
             )
         )
-        
+
     def delete_feed(self) -> None:
         """Delete the feed after confirmation."""
         try:
@@ -1104,25 +1198,22 @@ class EditFeedScreen(ModalScreen):
             progress_container = self.query_one("#progress-container", Vertical)
             progress_container.styles.display = "block"
             self._loading = True
-            
+
             # Delete the feed
             result = self.client.unsubscribe_feed(feed_id=self.feed_id)
-            
+
             # Hide progress indicator
             progress_container.styles.display = "none"
             self._loading = False
-            
-            if result and getattr(result, 'status', False):
-                self.notify(
-                    message="Feed deleted successfully", 
-                    title="Success"
-                )
+
+            if result and getattr(result, "status", False):
+                self.notify(message="Feed deleted successfully", title="Success")
                 self.dismiss(result={"action": "deleted", "feed_id": self.feed_id})
             else:
                 self.notify(
-                    message=f"Failed to delete feed: {getattr(result, 'message', 'Unknown error')}", 
+                    message=f"Failed to delete feed: {getattr(result, 'message', 'Unknown error')}",
                     title="Error",
-                    severity="error"
+                    severity="error",
                 )
         except Exception as e:
             # Hide progress indicator if there's an error
@@ -1130,14 +1221,12 @@ class EditFeedScreen(ModalScreen):
                 progress_container = self.query_one("#progress-container", Vertical)
                 progress_container.styles.display = "none"
                 self._loading = False
-                
+
             logger.error(msg=f"Error deleting feed: {e}")
             self.notify(
-                message=f"Error deleting feed: {e}", 
-                title="Error",
-                severity="error"
+                message=f"Error deleting feed: {e}", title="Error", severity="error"
             )
-            
+
     def action_close_screen(self) -> None:
         """Close the screen."""
         self.dismiss(result=False)
@@ -1309,7 +1398,9 @@ class LinkSelectionScreen(ModalScreen):
 
     def action_select(self) -> None:
         """Process the selected link."""
-        link_list: ListView = self.query_one(selector="#link-list", expect_type=ListView)
+        link_list: ListView = self.query_one(
+            selector="#link-list", expect_type=ListView
+        )
         if link_list.index is None or not self.links:
             self.notify(
                 title="Error", message="No link selected", timeout=3, severity="error"
@@ -1401,13 +1492,13 @@ class LinkSelectionScreen(ModalScreen):
 
             # Download the file
             download_path = self.configuration.download_folder / filename
-            
+
             with self.http_client.stream(method="GET", url=link) as response:
                 response.raise_for_status()
                 with open(file=download_path, mode="wb") as f:
                     for chunk in response.iter_bytes():
                         f.write(chunk)
-                        
+
             self.notify(
                 title="Downloaded",
                 message=f"File downloaded to {download_path}",
@@ -1710,7 +1801,9 @@ class ttrsscli(App[None]):
                 password=self.configuration.password,
             )
         except TTRNotLoggedIn:
-            logger.error(msg="Could not log in to Tiny Tiny RSS. Check your credentials.")
+            logger.error(
+                msg="Could not log in to Tiny Tiny RSS. Check your credentials."
+            )
             print("Error: Could not log in to Tiny Tiny RSS. Check your credentials.")
             sys.exit(1)
         except NameResolutionError:
@@ -1753,10 +1846,10 @@ class ttrsscli(App[None]):
         self.show_special_categories: bool = False
         self.tags = LimitedSizeDict(max_size=self.configuration.cache_size)
         self.temp_files: list[Path] = []  # List of temporary files to clean up on exit
-        
+
         # Create httpx client for downloads
         self.http_client = httpx.Client(follow_redirects=True)
-        
+
     def compose(self) -> ComposeResult:
         """Compose the three pane layout."""
         yield Header(show_clock=True, name=f"ttrsscli v{self.configuration.version}")
@@ -1771,6 +1864,10 @@ class ttrsscli(App[None]):
 
     async def on_list_view_highlighted(self, message: Message) -> None:
         """Called when an item is highlighted in the ListViews."""
+        # Skip handling if we're in a modal screen
+        if isinstance(self.screen, ModalScreen):
+            return
+
         highlighted_item: Any = message.item  # type: ignore
         try:
             if highlighted_item is not None:
@@ -1825,9 +1922,13 @@ class ttrsscli(App[None]):
         except Exception as err:
             logger.error(msg=f"Error handling list view highlight: {err}")
             self.notify(message=f"Error: {err}", title="Error", severity="error")
-            
+
     async def on_list_view_selected(self, message: Message) -> None:
         """Called when an item is selected in the ListView."""
+        # Skip handling if we're in a modal screen
+        if isinstance(self.screen, ModalScreen):
+            return
+
         selected_item: Any = message.item  # type: ignore
 
         try:
@@ -1861,24 +1962,36 @@ class ttrsscli(App[None]):
         """Fetch and display categories on startup."""
         await self.refresh_categories()
         await self.refresh_articles()
-    
+
     @work
     async def action_add_feed(self) -> None:
         """Open screen to add a new feed."""
-        # Determine if a category is selected
-        category_id = None
-        if hasattr(self, "category_id") and self.category_id and self.category_id.startswith("cat_"):
-            category_id = int(self.category_id.replace("cat_", ""))
-        
-        # Create and push the add feed screen
-        add_feed_screen = AddFeedScreen(client=self.client, category_id=category_id)
-        result = await self.push_screen_wait(add_feed_screen)
-        
-        # Refresh if a feed was added
-        if result:
-            self.notify(message="Refreshing after adding feed...", title="Refresh")
-            await self.refresh_categories()
-            await self.refresh_articles()
+        try:
+            # Determine if a category is selected
+            category_id = None
+            if (
+                hasattr(self, "category_id")
+                and self.category_id
+                and self.category_id.startswith("cat_")
+            ):
+                category_id = int(self.category_id.replace("cat_", ""))
+
+            # Create the add feed screen
+            add_feed_screen = AddFeedScreen(client=self.client, category_id=category_id)
+
+            # Push the screen and wait for result
+            result = await self.push_screen_wait(add_feed_screen)
+
+            # Refresh if a feed was added
+            if result:
+                self.notify(message="Refreshing after adding feed...", title="Refresh")
+                await self.refresh_categories()
+                await self.refresh_articles()
+        except Exception as e:
+            logger.error(msg=f"Error in add feed action: {e}")
+            self.notify(
+                message=f"Error adding feed: {e}", title="Error", severity="error"
+            )
 
     @work
     async def action_edit_feed(self) -> None:
@@ -1887,47 +2000,49 @@ class ttrsscli(App[None]):
         feed_id = None
         feed_title = ""
         feed_url = ""
-        
+
         # Check if we're in the categories view with a feed selected
-        if hasattr(self, "category_id") and self.category_id and self.category_id.startswith("feed_"):
+        if (
+            hasattr(self, "category_id")
+            and self.category_id
+            and self.category_id.startswith("feed_")
+        ):
             feed_id = int(self.category_id.replace("feed_", ""))
-            
+
             # Try to get feed details
             for category in self.client.get_categories():
-                for feed in self.client.get_feeds(cat_id=category.id, unread_only=False):  # type: ignore
+                for feed in self.client.get_feeds(
+                    cat_id=category.id, unread_only=False
+                ):  # type: ignore
                     if feed.id == feed_id:  # type: ignore
                         feed_title = feed.title  # type: ignore
-                        feed_url = getattr(feed, 'feed_url', '')
+                        feed_url = getattr(feed, "feed_url", "")
                         break
-        
+
         # Or check if we have an article selected - use its feed info
         elif self.current_article:
-            feed_id = getattr(self.current_article, 'feed_id', None)
-            feed_title = getattr(self.current_article, 'feed_title', '')
-            
+            feed_id = getattr(self.current_article, "feed_id", None)
+            feed_title = getattr(self.current_article, "feed_title", "")
+
         if not feed_id:
             self.notify(
-                message="Please select a feed to edit", 
+                message="Please select a feed to edit",
                 title="Edit Feed",
-                severity="warning"
+                severity="warning",
             )
             return
-        
+
         # Create and push the edit feed screen
         edit_feed_screen = EditFeedScreen(
-            client=self.client, 
-            feed_id=feed_id,
-            title=feed_title,
-            url=feed_url
+            client=self.client, feed_id=feed_id, title=feed_title, url=feed_url
         )
         result = await self.push_screen_wait(edit_feed_screen)
-        
+
         # Refresh if feed was updated or deleted
         if result:
             self.notify(message="Refreshing after feed update...", title="Refresh")
             await self.refresh_categories()
             await self.refresh_articles()
-
 
     def action_add_to_later_app(self, open=False) -> None:
         """Add article to Readwise."""
@@ -1996,7 +2111,7 @@ class ttrsscli(App[None]):
     def action_add_to_later_app_and_open(self) -> None:
         """Add article to Readwise and open that Readwise page in browser."""
         self.action_add_to_later_app(open=True)
-        
+
     async def action_clear(self) -> None:
         """Clear content window."""
         self.content_markdown = self.START_TEXT
@@ -2067,7 +2182,7 @@ class ttrsscli(App[None]):
         if self.show_header and self.configuration.obsidian_include_labels:
             try:
                 article_labels = (
-                    f"  - {', '.join(item[1] for item in self.current_article.labels)}" # type: ignore
+                    f"  - {', '.join(item[1] for item in self.current_article.labels)}"  # type: ignore
                     if getattr(self.current_article, "labels", None)
                     else ""
                 )
@@ -2077,7 +2192,8 @@ class ttrsscli(App[None]):
         if self.show_header and self.configuration.obsidian_include_tags:
             try:
                 article_tags = "\n".join(
-                    f"  - {item}" for item in self.tags.get(self.current_article.id, [])  # type: ignore
+                    f"  - {item}"
+                    for item in self.tags.get(self.current_article.id, [])  # type: ignore
                 )
             except (KeyError, TypeError):
                 article_tags = ""
@@ -2086,7 +2202,7 @@ class ttrsscli(App[None]):
         content = content.replace("<TAGS>", tags)
         content = content.replace("  - \n", "")
         content = content.replace("\n\n", "\n")
-        
+
         # Encode title and content for URL format
         encoded_title: str = quote(string=title).replace("/", "%2F")
         encoded_content: str = quote(string=content)
@@ -2102,9 +2218,9 @@ class ttrsscli(App[None]):
 
             # Create a temporary file instead
             try:
-                temp_path = Path(tempfile.mktemp(suffix='.md'))
-                temp_path.write_text(data=content, encoding='utf-8')
-                
+                temp_path = Path(tempfile.mktemp(suffix=".md"))
+                temp_path.write_text(data=content, encoding="utf-8")
+
                 self.temp_files.append(temp_path)  # Track for cleanup
 
                 # Open Obsidian with the file path
@@ -2145,7 +2261,7 @@ class ttrsscli(App[None]):
             # Open the Obsidian URI
             webbrowser.open(url=obsidian_uri)
             self.notify(message=f"Sent to Obsidian: {title}", title="Export Successful")
-            
+
     def action_focus_next_pane(self) -> None:
         """Move focus to the next pane."""
         panes: list[str] = ["categories", "articles", "content"]
@@ -2175,7 +2291,7 @@ class ttrsscli(App[None]):
         self.push_screen(
             screen=FullScreenMarkdown(markdown_content=self.content_markdown)
         )
-        
+
     def action_next_article(self) -> None:
         """Open next article."""
         self.last_key = "j"
@@ -2221,7 +2337,7 @@ class ttrsscli(App[None]):
             )
         else:
             self.notify(message="No links found in article", title="Info")
-            
+
     def _extract_article_urls(self, soup):
         """Extract URLs from article content.
 
@@ -2327,7 +2443,7 @@ class ttrsscli(App[None]):
                 timeout=5,
                 severity="error",
             )
-            
+
     def action_previous_article(self) -> None:
         """Open previous article."""
         self.last_key = "k"
@@ -2384,7 +2500,7 @@ class ttrsscli(App[None]):
                 open_links="readwise",
             )
         )
-        
+
     def action_readwise_article_url_and_open(self) -> None:
         """Add one article link to Readwise and open in browser."""
         if not self.configuration.readwise_token:
@@ -2435,7 +2551,7 @@ class ttrsscli(App[None]):
                 message=f"Search functionality is not fully implemented yet. Would search for: {search_term}",
                 title="Search",
             )
-            
+
     def action_save_article_url(self) -> None:
         """Save selected link from article to download folder."""
         if hasattr(self, "current_article_urls") and self.current_article_urls:
@@ -2480,7 +2596,7 @@ class ttrsscli(App[None]):
             self.notify(message="Clean URLs enabled", title="Info")
         else:
             self.notify(message="Clean URLs disabled", title="Info")
-            
+
     def action_toggle_dark(self) -> None:
         """Toggle dark mode."""
         self.theme = (
@@ -2526,7 +2642,7 @@ class ttrsscli(App[None]):
                 timeout=5,
                 severity="warning",
             )
-            
+
     async def action_toggle_special_categories(self) -> None:
         """Toggle special categories."""
         self.show_special_categories = not self.show_special_categories
@@ -2571,7 +2687,7 @@ class ttrsscli(App[None]):
             self.pop_screen()
         else:
             self.push_screen(screen=FullScreenTextArea(text=str(self.content_markdown)))
-            
+
     def _clean_markdown(self, markdown_text: str) -> str:
         """Clean up markdown text for better readability.
 
@@ -2796,7 +2912,7 @@ class ttrsscli(App[None]):
                 timeout=5,
                 severity="error",
             )
-            
+
     async def refresh_categories(self) -> None:
         """Load categories from TTRSS and filter based on unread-only mode."""
         try:
@@ -2816,7 +2932,9 @@ class ttrsscli(App[None]):
 
             if categories:
                 # Sort categories by title
-                sorted_categories: list[Category] = sorted(categories, key=lambda x: x.title)  # type: ignore
+                sorted_categories: list[Category] = sorted(
+                    categories, key=lambda x: x.title
+                )  # type: ignore
 
                 for category in sorted_categories:
                     # Skip categories with no unread articles if unread-only mode is enabled and special categories are hidden
@@ -2882,7 +3000,7 @@ class ttrsscli(App[None]):
                                     item=ListItem(
                                         Static(
                                             content="  "
-                                            + feed.title # type: ignore
+                                            + feed.title  # type: ignore
                                             + feed_unread_count
                                         ),
                                         id=feed_id,
@@ -2921,9 +3039,9 @@ class ttrsscli(App[None]):
                     temp_file.unlink()
             except Exception as e:
                 logger.error(msg=f"Error removing temporary file {temp_file}: {e}")
-                
+
         # Close the HTTP client
-        if hasattr(self, 'http_client'):
+        if hasattr(self, "http_client"):
             self.http_client.close()
 
 
