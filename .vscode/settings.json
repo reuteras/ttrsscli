@@ -5,6 +5,7 @@
         "aiosignal",
         "anyio",
         "beautifulsoup",
+        "caplog",
         "certifi",
         "cleanurl",
         "colorama",
