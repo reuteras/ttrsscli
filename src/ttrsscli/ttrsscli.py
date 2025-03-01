@@ -185,7 +185,7 @@ def handle_session_expiration(api_method):
 
 
 class TTRSSClient:
-    """A wrapper for ttrss-python to reauthenticate on failure."""
+    """A wrapper for ttrss-python to reauthenticate on failure and provide caching."""
 
     def __init__(self, url, username, password) -> None:
         """Initialize the TTRSS client."""
@@ -197,10 +197,6 @@ class TTRSSClient:
         )
         self.login()
         self.cache = {}  # Simple cache to reduce API calls
-    
-        # Store reference to the session and auth details for direct API calls
-        self.session = getattr(self.api, '_session', None)
-        self.api_url = getattr(self.api, '_url', self.url)
 
     def login(self) -> bool:
         """Authenticate with TTRSS and store session.
@@ -216,36 +212,26 @@ class TTRSSClient:
                 password=self.password,
                 auto_login=False
             )
-            
+
             # Get a new session ID
             self.api.login()
-            
-            # Update the session reference
-            self.session = getattr(self.api, '_session', None)
-            
+
             # Verify login status to make sure it worked
             if hasattr(self.api, 'logged_in') and callable(getattr(self.api, 'logged_in')):
                 is_logged_in = self.api.logged_in()
                 if not is_logged_in:
                     logger.warning("Login appeared successful but session is not valid.")
                     return False
-            
+
             logger.info("Successfully authenticated with TTRSS")
             return True
         except Exception as e:
             logger.error(f"Login failed: {e}")
             return False
-        
+
     @handle_session_expiration
     def get_articles(self, article_id) -> list[Article]:
-        """Fetch article content, retrying if session expires.
-
-        Args:
-            article_id: ID of the article to fetch
-
-        Returns:
-            List of articles
-        """
+        """Fetch article content, retrying if session expires."""
         cache_key: str = f"article_{article_id}"
         if cache_key in self.cache:
             return self.cache[cache_key]
@@ -256,11 +242,7 @@ class TTRSSClient:
 
     @handle_session_expiration
     def get_categories(self) -> list[Category]:
-        """Fetch category list, retrying if session expires.
-
-        Returns:
-            List of categories
-        """
+        """Fetch category list, retrying if session expires."""
         cache_key = "categories"
         if cache_key in self.cache:
             return self.cache[cache_key]
@@ -271,15 +253,7 @@ class TTRSSClient:
 
     @handle_session_expiration
     def get_feeds(self, cat_id, unread_only) -> list[Feed]:
-        """Fetch feed list, retrying if session expires.
-
-        Args:
-            cat_id: Category ID
-            unread_only: If True, only show feeds with unread articles
-
-        Returns:
-            List of feeds
-        """
+        """Fetch feed list, retrying if session expires."""
         cache_key = f"feeds_{cat_id}_{unread_only}"
         if cache_key in self.cache:
             return self.cache[cache_key]
@@ -290,16 +264,7 @@ class TTRSSClient:
 
     @handle_session_expiration
     def get_headlines(self, feed_id, is_cat, view_mode) -> list[Headline]:
-        """Fetch headlines for a feed, retrying if session expires.
-
-        Args:
-            feed_id: Feed ID
-            is_cat: If True, feed_id is a category ID
-            view_mode: View mode (all_articles or unread)
-
-        Returns:
-            List of headlines
-        """
+        """Fetch headlines for a feed, retrying if session expires."""
         cache_key: str = f"headlines_{feed_id}_{is_cat}_{view_mode}"
         if cache_key in self.cache:
             return self.cache[cache_key]
@@ -312,33 +277,21 @@ class TTRSSClient:
 
     @handle_session_expiration
     def mark_read(self, article_id) -> None:
-        """Mark article as read, retrying if session expires.
-
-        Args:
-            article_id: Article ID
-        """
+        """Mark article as read, retrying if session expires."""
         self.api.mark_read(article_id=article_id)
         # Invalidate relevant cache entries
         self._invalidate_headline_cache()
 
     @handle_session_expiration
     def mark_unread(self, article_id) -> None:
-        """Mark article as unread, retrying if session expires.
-
-        Args:
-            article_id: Article ID
-        """
+        """Mark article as unread, retrying if session expires."""
         self.api.mark_unread(article_id=article_id)
         # Invalidate relevant cache entries
         self._invalidate_headline_cache()
 
     @handle_session_expiration
     def toggle_starred(self, article_id) -> None:
-        """Toggle article starred, retrying if session expires.
-
-        Args:
-            article_id: Article ID
-        """
+        """Toggle article starred, retrying if session expires."""
         self.api.toggle_starred(article_id=article_id)
         # Invalidate article cache
         if f"article_{article_id}" in self.cache:
@@ -346,11 +299,7 @@ class TTRSSClient:
 
     @handle_session_expiration
     def toggle_unread(self, article_id) -> None:
-        """Toggle article read/unread, retrying if session expires.
-
-        Args:
-            article_id: Article ID
-        """
+        """Toggle article read/unread, retrying if session expires."""
         self.api.toggle_unread(article_id=article_id)
         # Invalidate relevant cache entries
         if f"article_{article_id}" in self.cache:
@@ -358,372 +307,62 @@ class TTRSSClient:
         self._invalidate_headline_cache()
 
     @handle_session_expiration
-    def subscribe_to_feed(
-        self, feed_url, category_id=0, feed_title=None, login=None, password=None
-    ) -> Any:
-        """Subscribe to a new feed.
+    def subscribe_to_feed(self, feed_url, category_id=0, feed_title=None, login=None, password=None) -> Any:
+        """Subscribe to a new feed."""
+        response = self.api.subscribe(
+            feed_url=feed_url,
+            category_id=category_id,
+            feed_title=feed_title,
+            login=login,
+            password=password
+        )
 
-        Args:
-            feed_url: URL of the feed to subscribe to
-            category_id: Category ID to place the feed in (default: 0 - Uncategorized)
-            feed_title: Custom title for the feed (optional)
-            login: Username for password-protected feeds (optional)
-            password: Password for password-protected feeds (optional)
+        # Clear relevant cache entries
+        self._invalidate_headline_cache()
 
-        Returns:
-            API response object with status and message
-        """
-        # Make sure we're logged in
-        if not self.api.sid:
-            self.login()
-
-        params = {
-            "op": "subscribeToFeed",
-            "feed_url": feed_url,
-            "category_id": category_id,
-            "sid": self.api.sid,
-        }
-
-        # Add optional parameters if provided
-        if feed_title:
-            params["feed_title"] = feed_title
-        if login:
-            params["login"] = login
-        if password:
-            params["password"] = password
-
-        try:
-            # Send the request directly
-            response = self.direct_api_call(op="subscribeToFeed", params=params)
-
-            # Clear relevant cache entries
-            self._invalidate_headline_cache()
-
-            # The response should contain status and message fields
-            return response
-        except Exception as e:
-            logger.error(msg=f"Subscribe to feed failed: {e}")
-            raise
+        return response
 
     @handle_session_expiration
     def unsubscribe_feed(self, feed_id) -> Any:
-        """Unsubscribe from a feed (delete it).
+        """Unsubscribe from a feed (delete it)."""
+        response = self.api.unsubscribe(feed_id=feed_id)
 
-        Args:
-            feed_id: ID of the feed to unsubscribe from
+        # Clear relevant cache entries
+        self._invalidate_headline_cache()
 
-        Returns:
-            API response object with status
-        """
-        # Make sure we're logged in
-        if not self.api.sid:
-            self.login()
-
-        params = {"op": "unsubscribeFeed", "feed_id": feed_id, "sid": self.api.sid}
-
-        try:
-            # Send the request directly
-            response = self.direct_api_call(op="unsubscribeFeed", params=params)
-
-            # Clear relevant cache entries
-            self._invalidate_headline_cache()
-
-            return response
-        except Exception as e:
-            logger.error(msg=f"Unsubscribe feed failed: {e}")
-            raise
+        return response
 
     @handle_session_expiration
     def get_feed_properties(self, feed_id) -> Any:
-        """Get properties for a specific feed.
-
-        Args:
-            feed_id: ID of the feed
-
-        Returns:
-            API response object with feed properties
-        """
+        """Get properties for a specific feed."""
         cache_key = f"feed_properties_{feed_id}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        # Make sure we're logged in
-        if not self.api.sid:
-            self.login()
+        feed_props = self.api.get_feed_properties(feed_id=feed_id)
 
-        try:
-            # First try to use the native API method to get feed info
-            feeds = self.api.get_feeds(cat_id=-4)  # Get all feeds
-            for feed in feeds:
-                if int(feed.id) == int(feed_id):
-                    feed_props = feed
-                    self.cache[cache_key] = feed_props
-                    return feed_props
-                    
-            # If the feed wasn't found, try the direct API call as a fallback
-            params = {
-                "op": "getFeeds",
-                "feed_id": feed_id,
-                "include_nested": False,
-                "sid": self.api.sid,
-            }
+        if feed_props:
+            self.cache[cache_key] = feed_props
 
-            response = self.direct_api_call(op="getFeeds", params=params)
+        return feed_props
 
-            # The response should be a list with one feed
-            if response and isinstance(response, list) and len(response) > 0:
-                feed_props = response[0]
-                self.cache[cache_key] = feed_props
-                return feed_props
-            elif response and isinstance(response, dict) and "id" in response:
-                # Sometimes the API returns a single feed object
-                self.cache[cache_key] = response
-                return response
-
-            logger.warning(f"No feed properties found for feed ID {feed_id}")
-            return None
-        except Exception as e:
-            logger.error(f"Get feed properties failed: {e}")
-            raise
-        
     @handle_session_expiration
     def update_feed_properties(self, feed_id, title=None, category_id=None, **kwargs) -> Any:
-        """Update properties for a specific feed.
+        """Update properties for a specific feed."""
+        response = self.api.update_feed_properties(
+            feed_id=feed_id,
+            title=title,
+            category_id=category_id,
+            **kwargs
+        )
 
-        Args:
-            feed_id: ID of the feed to update
-            title: New title for the feed (optional)
-            category_id: New category ID for the feed (optional)
-            **kwargs: Additional properties to update (e.g., update_enabled, include_in_digest)
+        # Clear relevant cache entries
+        if f"feed_properties_{feed_id}" in self.cache:
+            del self.cache[f"feed_properties_{feed_id}"]
+        self._invalidate_headline_cache()
 
-        Returns:
-            API response object with status
-        """
-        # Make sure we're logged in
-        if not self.api.sid:
-            self.login()
+        return response
 
-        params = {"op": "updateFeed", "feed_id": feed_id}
-
-        # Add optional parameters if provided
-        if title:
-            params["feed_title"] = title
-        if category_id is not None:
-            params["category_id"] = category_id
-
-        # Add additional properties from kwargs
-        for key, value in kwargs.items():
-            # Convert to 1/0 for boolean values
-            if isinstance(value, bool):
-                params[key] = 1 if value else 0
-            else:
-                params[key] = value
-
-        try:
-            # Try to use the native ttrss-python client method if available
-            # This may not be implemented, so we'll fall back to our direct API call
-            try:
-                # First try using the underlying client's method if it exists
-                if hasattr(self.api, 'update_feed') and callable(getattr(self.api, 'update_feed')):
-                    self.api.update_feed(feed_id=feed_id)
-                    
-                    # We still need to make our direct API call for additional properties
-                    response = self.direct_api_call(op="updateFeed", params=params)
-                else:
-                    # Just use our direct API call
-                    response = self.direct_api_call(op="updateFeed", params=params)
-            except AttributeError:
-                # The native client doesn't have this method, use our direct API call
-                response = self.direct_api_call(op="updateFeed", params=params)
-
-            # Clear relevant cache entries
-            if f"feed_properties_{feed_id}" in self.cache:
-                del self.cache[f"feed_properties_{feed_id}"]
-            self._invalidate_headline_cache()
-
-            return response
-        except Exception as e:
-            logger.error(f"Update feed properties failed: {e}")
-            raise
-    
-    @handle_session_expiration
-    def direct_api_call(self, op, params=None):
-        """Make a direct API call using the session from the TTRClient."""
-        if params is None:
-            params = {}
-            
-        # Make sure we're logged in
-        if not self.api.sid:
-            logger.debug(f"Session not found before API call to {op}, logging in...")
-            self.login()
-            
-        # Full parameters
-        full_params = {
-            "op": op,
-            "sid": self.api.sid
-        }
-        full_params.update(params)
-        
-        # When a retry is triggered, we'll use this retry counter
-        retry_count = params.get("_retry_count", 0)
-        max_retries = 2
-        
-        try:
-            import json
-            json_data = json.dumps(full_params)
-            logger.debug(f"Sending request to {op} with params: {json_data}")
-            
-            # If we have access to the session, use it
-            if self.session:
-                response = self.session.post(
-                    self.api_url,
-                    data={"json": json_data}
-                )
-                # Log the response status
-                logger.debug(f"API response status: {response.status_code}")
-                
-                # Check status code
-                response.raise_for_status()
-                
-                # Check if response is empty
-                if not response.text:
-                    logger.error(f"Empty response from API call to {op}")
-                    raise Exception(f"Empty response from API call to {op}")
-                    
-                # Check if the response is HTML (typically a login page)
-                if response.text.strip().startswith('<!DOCTYPE html>') or response.text.strip().startswith('<html>'):
-                    logger.warning(f"Received HTML response instead of JSON. Session likely expired.")
-                    
-                    # Force a new login
-                    self.api.sid = None
-                    self.login()
-                    
-                    # Retry the request if we haven't exceeded max retries
-                    if retry_count < max_retries:
-                        params["_retry_count"] = retry_count + 1
-                        logger.info(f"Retrying API call after session refresh ({params['_retry_count']}/{max_retries})")
-                        return self.direct_api_call(op, params)
-                    else:
-                        raise Exception("Exceeded maximum number of retries for API call")
-                
-                # Try to parse the JSON response
-                try:
-                    result = response.json()
-                except json.JSONDecodeError as e:
-                    # Log a truncated version of the response for debugging
-                    response_preview = response.text[:500] + "..." if len(response.text) > 500 else response.text
-                    logger.error(f"Invalid JSON response: {response_preview}")
-                    
-                    # Force a new login and retry if we haven't exceeded max retries
-                    if retry_count < max_retries:
-                        self.api.sid = None
-                        self.login()
-                        params["_retry_count"] = retry_count + 1
-                        logger.info(f"Retrying API call after JSON parse failure ({params['_retry_count']}/{max_retries})")
-                        return self.direct_api_call(op, params)
-                    else:
-                        raise Exception(f"Invalid JSON response: {e}")
-                
-                # Check for API errors
-                if "status" in result and result["status"] == 0:
-                    if "content" in result and "error" in result["content"]:
-                        error_msg = result["content"]["error"]
-                        
-                        # Handle NOT_LOGGED_IN error
-                        if error_msg == "NOT_LOGGED_IN" and retry_count < max_retries:
-                            logger.warning("Session expired (NOT_LOGGED_IN), re-login and retry")
-                            self.api.sid = None
-                            self.login()
-                            params["_retry_count"] = retry_count + 1
-                            return self.direct_api_call(op, params)
-                        
-                        raise Exception(f"API error: {error_msg}")
-                    
-                return result.get("content", result)
-            else:                
-                with httpx.Client(follow_redirects=True) as client:
-                    response = client.post(
-                        self.api_url,
-                        data={"json": json_data}
-                    )
-                    # Log the response status
-                    logger.debug(f"API response status: {response.status_code}")
-                    
-                    # Check status code
-                    response.raise_for_status()
-                    
-                    # Check if response is empty
-                    if not response.text:
-                        logger.error(f"Empty response from API call to {op}")
-                        raise Exception(f"Empty response from API call to {op}")
-                        
-                    # Check if the response is HTML (typically a login page)
-                    if response.text.strip().startswith('<!DOCTYPE html>') or response.text.strip().startswith('<html>'):
-                        logger.warning(f"Received HTML response instead of JSON. Session likely expired.")
-                        
-                        # Force a new login
-                        self.api.sid = None
-                        self.login()
-                        
-                        # Retry the request if we haven't exceeded max retries
-                        if retry_count < max_retries:
-                            params["_retry_count"] = retry_count + 1
-                            logger.info(f"Retrying API call after session refresh ({params['_retry_count']}/{max_retries})")
-                            return self.direct_api_call(op, params)
-                        else:
-                            raise Exception("Exceeded maximum number of retries for API call")
-                    
-                    # Try to parse the JSON response
-                    try:
-                        result = response.json()
-                    except json.JSONDecodeError as e:
-                        # Log a truncated version of the response for debugging
-                        response_preview = response.text[:500] + "..." if len(response.text) > 500 else response.text
-                        logger.error(f"Invalid JSON response: {response_preview}")
-                        
-                        # Force a new login and retry if we haven't exceeded max retries
-                        if retry_count < max_retries:
-                            self.api.sid = None
-                            self.login()
-                            params["_retry_count"] = retry_count + 1
-                            logger.info(f"Retrying API call after JSON parse failure ({params['_retry_count']}/{max_retries})")
-                            return self.direct_api_call(op, params)
-                        else:
-                            raise Exception(f"Invalid JSON response: {e}")
-                    
-                    # Check for API errors
-                    if "status" in result and result["status"] == 0:
-                        if "content" in result and "error" in result["content"]:
-                            error_msg = result["content"]["error"]
-                            
-                            # Handle NOT_LOGGED_IN error
-                            if error_msg == "NOT_LOGGED_IN" and retry_count < max_retries:
-                                logger.warning("Session expired (NOT_LOGGED_IN), re-login and retry")
-                                self.api.sid = None
-                                self.login()
-                                params["_retry_count"] = retry_count + 1
-                                return self.direct_api_call(op, params)
-                            
-                            raise Exception(f"API error: {error_msg}")
-                        
-                    return result.get("content", result)
-        except Exception as e:
-            logger.error(f"API call to {op} failed: {e}")
-            
-            # Check if it's a session-related error
-            if "NOT_LOGGED_IN" in str(e) or "401" in str(e) or "403" in str(e) or "session" in str(e).lower():
-                logger.info(f"Session may have expired during API call to {op}, attempting to re-login")
-                self.api.sid = None
-                self.login()
-                
-                # Retry only if we haven't exceeded the max retry count
-                if retry_count < max_retries:
-                    params["_retry_count"] = retry_count + 1
-                    logger.info(f"Retrying API call after exception ({params['_retry_count']}/{max_retries})")
-                    return self.direct_api_call(op, params)
-            
-            raise
-        
     def _invalidate_headline_cache(self) -> None:
         """Invalidate all headline cache entries."""
         keys_to_remove = [k for k in self.cache if k.startswith("headlines_")]
@@ -1157,9 +796,9 @@ class EditFeedScreen(ModalScreen):
         super().__init__()
         self.client = client
         self.feed_id = feed_id
-        self.current_title = title
-        self.current_url = url
-        self.feed_title = title
+        self.current_title: str = title
+        self.current_url: str = url
+        self.feed_title: str = title
         self.categories = []
         self.selected_category = None
         self.current_category_id = None
@@ -1193,7 +832,7 @@ class EditFeedScreen(ModalScreen):
             yield Label(renderable="Settings:")
 
             with Vertical(id="settings-container"):
-                yield Static("Loading feed settings...")
+                yield Static(content="Loading feed settings...")
 
             # Progress indicator (hidden using display property)
             with Vertical(id="progress-container"):
@@ -1207,7 +846,7 @@ class EditFeedScreen(ModalScreen):
     def on_mount(self) -> None:
         """Set initial visibility of progress bar."""
         # Hide progress bar initially
-        progress_container = self.query_one("#progress-container", Vertical)
+        progress_container: Vertical = self.query_one(selector="#progress-container", expect_type=Vertical)
         progress_container.styles.display = "none"
 
     async def on_show(self) -> None:
@@ -1215,7 +854,7 @@ class EditFeedScreen(ModalScreen):
         try:
             # Show progress indicator
             self._loading = True
-            progress_container = self.query_one("#progress-container", Vertical)
+            progress_container: Vertical = self.query_one(selector="#progress-container", expect_type=Vertical)
             progress_container.styles.display = "block"
 
             # Fetch categories for the dropdown
@@ -1231,7 +870,20 @@ class EditFeedScreen(ModalScreen):
             # Fetch feed details using get_feed_properties with additional error handling
             try:
                 self.feed_details = self.client.get_feed_properties(feed_id=self.feed_id)
-                
+
+                # Update feed URL if available in feed_details
+                if self.feed_details:
+                    # Update the URL field if feed_url is available
+                    if hasattr(self.feed_details, "feed_url"):
+                        self.current_url = self.feed_details.feed_url
+                        url_input = self.query_one("#feed-url-input", Input)
+                        url_input.value = self.current_url
+                        self.notify(
+                            title="Warning",
+                            message=f"Feed URL {self.current_url} is not editable.",
+                            severity="warning",
+                            timeout=5)
+
                 if not self.feed_details:
                     # If get_feed_properties returns None, try to get feed info from all feeds
                     logger.info(f"Trying to find feed {self.feed_id} in all feeds")
@@ -1242,7 +894,7 @@ class EditFeedScreen(ModalScreen):
                             all_feeds.extend(feeds)
                         except Exception as feed_err:
                             logger.warning(f"Error getting feeds for category {category.id}: {feed_err}")
-                    
+
                     # Find the feed in all_feeds
                     for feed in all_feeds:
                         if int(feed.id) == int(self.feed_id):
@@ -1324,7 +976,7 @@ class EditFeedScreen(ModalScreen):
                     container.compose_add_child(Label(label_text))
                     # Add to our list of widgets to mount
                     setting_widgets.append(container)
-                
+
                 # Now mount all the widgets at once
                 if setting_widgets:
                     await settings_container.mount(*setting_widgets)
@@ -2251,8 +1903,8 @@ class ttrsscli(App[None]):
             # Try to get feed details
             for category in self.client.get_categories():
                 for feed in self.client.get_feeds(
-                    cat_id=category.id, unread_only=False
-                ):  # type: ignore
+                    cat_id=category.id, unread_only=False  # type: ignore
+                ):
                     if feed.id == feed_id:  # type: ignore
                         feed_title = feed.title  # type: ignore
                         feed_url = getattr(feed, "feed_url", "")

@@ -87,8 +87,8 @@ docstring-code-format = false
 # enabled.
 docstring-code-line-length = "dynamic"
 
+[tool.uv.sources]
+ttrss-python = { git = "https://github.com/reuteras/ttrss-python.git" }
+
 [tool.ruff.lint.pydocstyle]
 convention="google"
-
-[tool.uv.sources]
-ttrss-python = { git = "https://github.com/reuteras/ttrss-python.git", rev = "master" }

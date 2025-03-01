@@ -1281,7 +1281,7 @@ wheels = [
 [[package]]
 name = "ttrss-python"
 version = "0.5"
-source = { git = "https://github.com/reuteras/ttrss-python.git?rev=master#120734eeaaeb395acbb1f01b827351e67c356600" }
+source = { git = "https://github.com/reuteras/ttrss-python.git#ad9fa1fe37dcd1435d6e4da0986ed08bbf19415c" }
 dependencies = [
     { name = "requests" },
 ]
@@ -1322,7 +1322,7 @@ requires-dist = [
     { name = "textual", extras = ["syntax"], specifier = ">=1.0.0" },
     { name = "textual-serve", specifier = ">=1.1.1" },
     { name = "toml", specifier = ">=0.10.2" },
-    { name = "ttrss-python", git = "https://github.com/reuteras/ttrss-python.git?rev=master" },
+    { name = "ttrss-python", git = "https://github.com/reuteras/ttrss-python.git" },
 ]
 
 [package.metadata.requires-dev]
