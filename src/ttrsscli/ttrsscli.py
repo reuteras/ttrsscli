@@ -188,13 +188,7 @@ class TTRSSClient:
     """A wrapper for ttrss-python to reauthenticate on failure."""
 
     def __init__(self, url, username, password) -> None:
-        """Initialize the TTRSS client.
-
-        Args:
-            url: URL of the TTRSS API
-            username: TTRSS username
-            password: TTRSS password
-        """
+        """Initialize the TTRSS client."""
         self.url: str = url
         self.username: str = username
         self.password: str = password
@@ -203,6 +197,10 @@ class TTRSSClient:
         )
         self.login()
         self.cache = {}  # Simple cache to reduce API calls
+    
+        # Store reference to the session and auth details for direct API calls
+        self.session = getattr(self.api, '_session', None)
+        self.api_url = getattr(self.api, '_url', self.url)
 
     def login(self) -> bool:
         """Authenticate with TTRSS and store session.
@@ -375,7 +373,7 @@ class TTRSSClient:
 
         try:
             # Send the request directly
-            response = self.api.send_request(params=params)
+            response = self.direct_api_call(op="subscribeToFeed", params=params)
 
             # Clear relevant cache entries
             self._invalidate_headline_cache()
@@ -404,7 +402,7 @@ class TTRSSClient:
 
         try:
             # Send the request directly
-            response = self.api._query(params)
+            response = self.direct_api_call(op="unsubscribeFeed", params=params)
 
             # Clear relevant cache entries
             self._invalidate_headline_cache()
@@ -441,7 +439,7 @@ class TTRSSClient:
 
         try:
             # Send the request directly
-            response = self.api._query(params)
+            response = self.direct_api_call(op="getFeeds", params=params)
 
             # The response should be a list with one feed
             if response and isinstance(response, list) and len(response) > 0:
@@ -491,7 +489,7 @@ class TTRSSClient:
 
         try:
             # Send the request directly
-            response = self.api._query(params)
+            response = self.direct_api_call(op="updateFeed", params=params)
 
             # Clear relevant cache entries
             if f"feed_properties_{feed_id}" in self.cache:
@@ -503,29 +501,58 @@ class TTRSSClient:
             logger.error(msg=f"Update feed properties failed: {e}")
             raise
 
-    @handle_session_expiration
-    def send_request(self, params: dict) -> Any:
-        """Send a request to the TTRSS API directly.
-
-        Args:
-            params: Dictionary of parameters to send to the API
-
-        Returns:
-            API response object
-        """
+    def direct_api_call(self, op, params=None):
+        """Make a direct API call using the session from the TTRClient."""
+        if params is None:
+            params = {}
+            
         # Make sure we're logged in
         if not self.api.sid:
             self.login()
-
+            
+        # Full parameters
+        full_params = {
+            "op": op,
+            "sid": self.api.sid
+        }
+        full_params.update(params)
+        
         try:
-            # Add session ID to parameters
-            if "sid" not in params:
-                params["sid"] = self.api.sid
-
-            # Send the request using the underlying API
-            return self.api._query(params)
+            # If we have access to the session, use it
+            if self.session:
+                import json
+                response = self.session.post(
+                    self.api_url,
+                    data={"json": json.dumps(full_params)}
+                )
+                response.raise_for_status()
+                result = response.json()
+                
+                # Check for API errors
+                if "status" in result and result["status"] == 0:
+                    if "content" in result and "error" in result["content"]:
+                        error_msg = result["content"]["error"]
+                        raise Exception(f"API error: {error_msg}")
+                    
+                return result.get("content", result)
+            else:                
+                with httpx.Client(follow_redirects=True) as client:
+                    response = client.post(
+                        self.api_url,
+                        data={"json": json.dumps(full_params)}
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    # Check for API errors
+                    if "status" in result and result["status"] == 0:
+                        if "content" in result and "error" in result["content"]:
+                            error_msg = result["content"]["error"]
+                            raise Exception(f"API error: {error_msg}")
+                        
+                    return result.get("content", result)
         except Exception as e:
-            logger.error(msg=f"API request failed: {e}")
+            logger.error(f"API call to {op} failed: {e}")
             raise
 
     def _invalidate_headline_cache(self) -> None:
