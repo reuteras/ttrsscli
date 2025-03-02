@@ -438,6 +438,19 @@ class TTRSSClient:
 
         return response
 
+    @handle_session_expiration
+    def mark_all_read(self, feed_id, is_cat=False):
+        """Mark all articles in a feed as read, retrying if session expires."""
+        try:
+            # Use catchup_feed to mark all articles in a specific feed as read
+            self.api.catchup_feed(feed_id=feed_id, is_cat=is_cat)
+            # Invalidate relevant cache entries
+            self._invalidate_headline_cache()
+            return True
+        except Exception as e:
+            logger.error(msg=f"Error marking all articles as read: {e}")
+            return False
+
     def _invalidate_headline_cache(self) -> None:
         """Invalidate all headline cache entries."""
         keys_to_remove = [k for k in self.cache if k.startswith("headlines_")]
@@ -618,6 +631,7 @@ ALLOW_IN_FULL_SCREEN: list[str] = [
 ]
 
 
+# Textual Screen classes
 class ConfirmScreen(ModalScreen):
     """Modal screen for confirming actions like deletion."""
 
@@ -669,6 +683,57 @@ class ConfirmScreen(ModalScreen):
     def action_cancel(self) -> None:
         """Cancel the action."""
         self.app.pop_screen()
+
+
+class ConfirmMarkAllReadScreen(ModalScreen):
+    """Modal screen for confirming mark all as read action."""
+
+    BINDINGS = [  # noqa: RUF012
+        ("escape", "cancel", "Cancel"),
+        ("enter", "confirm", "Confirm"),
+    ]
+
+    def __init__(
+        self, feed_id, is_cat=False, feed_title="this feed"
+    ) -> None:
+        """Initialize the confirmation screen.
+
+        Args:
+            feed_id: ID of the feed to mark as read
+            is_cat: Whether the feed is a category
+            feed_title: Title of the feed for display
+        """
+        super().__init__()
+        self.feed_id = feed_id
+        self.is_cat = is_cat
+        self.feed_title = feed_title
+
+    def compose(self) -> ComposeResult:
+        """Define the content layout of the confirmation screen."""
+        with Container(id="confirm-small-container"):
+            yield Label(renderable="Mark All As Read", id="confirm-title")
+            yield Label(
+                renderable=f"Mark all articles in '{self.feed_title}' as read?", 
+                id="confirm-message"
+            )
+            with Horizontal(id="confirm-buttons"):
+                yield Button(label="Yes", id="confirm-button", variant="error")
+                yield Button(label="No", id="cancel-button")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "confirm-button":
+            self.action_confirm()
+        elif event.button.id == "cancel-button":
+            self.action_cancel()
+
+    def action_confirm(self) -> None:
+        """Confirm the action and mark all articles as read."""
+        self.dismiss(result={"confirm": True, "feed_id": self.feed_id, "is_cat": self.is_cat})
+
+    def action_cancel(self) -> None:
+        """Cancel the action."""
+        self.dismiss(result={"confirm": False})
 
 
 class AddFeedScreen(ModalScreen):
@@ -1208,7 +1273,6 @@ class EditFeedScreen(ModalScreen):
         self.dismiss(result=False)
 
 
-# Textual Screen classes
 class SearchScreen(ModalScreen):
     """Modal screen for searching articles."""
 
@@ -1705,6 +1769,7 @@ class ttrsscli(App[None]):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("?", "toggle_help", "Help"),
         ("a", "add_feed", "Add Feed"),
+        ("A", "mark_all_read", "Mark all read"),
         ("C", "toggle_clean_url", "Toggle clean URLs"),
         ("c", "clear", "Clear"),
         ("comma", "refresh", "Refresh"),
@@ -1745,14 +1810,17 @@ class ttrsscli(App[None]):
         ("u", "toggle_unread", "Toggle unread only"),
         ("v", "show_version", "Show version"),
     ]
+    
     SCREENS: ClassVar[dict[str, type[Screen]]] = {
+        "add_feed": AddFeedScreen,
+        "confirm": ConfirmScreen,
+        "confirm_mark_all_read": ConfirmMarkAllReadScreen,
+        "edit_feed": EditFeedScreen,
         "help": HelpScreen,
         "search": SearchScreen,
         "progress": ProgressScreen,
-        "add_feed": AddFeedScreen,
-        "edit_feed": EditFeedScreen,
-        "confirm": ConfirmScreen,
     }
+
     CSS_PATH: str = "styles.tcss"
 
     def __init__(self) -> None:
@@ -1868,6 +1936,7 @@ class ttrsscli(App[None]):
                     and not highlighted_item.id is None
                     and highlighted_item.id.startswith("feed_")
                 ):
+                    self.category_id = highlighted_item.id
                     await self.refresh_articles(show_id=highlighted_item.id)
 
                 # Handle feed title selection in article list -> navigate articles
@@ -3010,6 +3079,88 @@ class ttrsscli(App[None]):
         # Close the HTTP client
         if hasattr(self, "http_client"):
             self.http_client.close()
+
+    @work
+    async def action_mark_all_read(self) -> None:  # noqa: PLR0912
+        """Mark all articles in the selected feed or category as read."""
+        feed_id = None
+        feed_title: str = ""
+        is_cat = False
+        
+        # Determine if a feed or category is selected
+        if hasattr(self, "category_id") and self.category_id:
+            if self.category_id.startswith("feed_"):
+                # We have a feed ID
+                feed_id = int(self.category_id.replace("feed_", ""))
+                is_cat = False
+                
+                # Try to get feed title
+                try:
+                    feed_props = self.client.get_feed_properties(feed_id=feed_id)
+                    if feed_props and hasattr(feed_props, "title"):
+                        feed_title = feed_props.title
+                    else:
+                        feed_title = "this feed"
+                except Exception as e:
+                    logger.debug(msg=f"Error getting feed title: {e}")
+                    feed_title = "this feed"
+                    
+            elif self.category_id.startswith("cat_"):
+                # We have a category ID
+                feed_id = int(self.category_id.replace("cat_", ""))
+                is_cat = True
+                
+                # Try to get category title
+                try:
+                    categories: list[Category] = self.client.get_categories()
+                    for category in categories:
+                        if int(category.id) == feed_id: # type: ignore
+                            feed_title = category.title # type: ignore
+                            break
+                    if not feed_title:
+                        feed_title = "this category"
+                except Exception as e:
+                    logger.debug(msg=f"Error getting category title: {e}")
+                    feed_title = "this category"
+        
+        if not feed_id:
+            self.notify(
+                message="Please select a feed or category first",
+                title="Mark All as Read",
+                severity="warning",
+            )
+            return
+        
+        # Show confirmation dialog
+        confirm_screen = ConfirmMarkAllReadScreen(
+            feed_id=feed_id,
+            is_cat=is_cat,
+            feed_title=feed_title
+        )
+        result = await self.push_screen_wait(screen=confirm_screen)
+        
+        if result and result.get("confirm"):
+            try:
+                # Mark all as read for the specific feed only
+                success = self.client.mark_all_read(feed_id=feed_id, is_cat=is_cat)
+                
+                if success:
+                    # Refresh the UI
+                    self.notify(
+                        message=f"Marked all articles in '{feed_title}' as read",
+                        title="Success"
+                    )
+                    await self.refresh_categories()
+                    await self.refresh_articles(show_id=self.category_id)
+                else:
+                    raise Exception("Failed to mark all as read")
+            except Exception as e:
+                logger.error(msg=f"Error marking all as read: {e}")
+                self.notify(
+                    message=f"Error marking all as read: {e}",
+                    title="Error",
+                    severity="error"
+                )
 
 
 def main() -> None:
