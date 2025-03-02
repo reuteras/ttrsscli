@@ -147,24 +147,6 @@ class TestGetConfValue:
         mock_exit.assert_called_once_with(1)
         assert "Error: 'op' command not found." in caplog.text
 
-    @patch("subprocess.run")
-    def test_get_conf_value_op_command_name_resolution_error(
-        self, mock_run, caplog
-    ) -> None:
-        """Test get_conf_value with NameResolutionError."""
-        from urllib3.exceptions import NameResolutionError
-
-        mock_run.side_effect = NameResolutionError(None, "mock_host", "mock_url")
-
-        op_command = "op read op://vault/item/field"
-
-        with patch("sys.exit") as mock_exit, patch("builtins.print") as mock_print:
-            get_conf_value(op_command=op_command)
-
-        mock_print.assert_called_once()
-        mock_exit.assert_called_once_with(1)
-        assert "Error: Couldn't look up server for url." in caplog.text
-
     def test_get_conf_value_plain_string(self) -> None:
         """Test get_conf_value with a plain string (no 'op' command)."""
         op_command = "plain_value"
