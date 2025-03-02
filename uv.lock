@@ -1281,7 +1281,7 @@ wheels = [
 [[package]]
 name = "ttrss-python"
 version = "0.5"
-source = { git = "https://github.com/reuteras/ttrss-python.git#ad9fa1fe37dcd1435d6e4da0986ed08bbf19415c" }
+source = { git = "https://github.com/reuteras/ttrss-python.git#fac3cdcf166d6bffec2772f79078115dec38951d" }
 dependencies = [
     { name = "requests" },
 ]
