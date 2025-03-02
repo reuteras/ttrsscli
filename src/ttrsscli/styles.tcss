@@ -154,3 +154,14 @@ LinkSelectionScreen ListView {
 #confirm-buttons {
     align: center middle;
 }
+
+/* Smaller confirmation dialog */
+#confirm-small-container {
+    width: 40%;
+    height: 20%;
+    max-height: 50%;
+    border: tall $error;
+    background: $surface;
+    padding: 1 2;
+    margin: 1 2;
+}
