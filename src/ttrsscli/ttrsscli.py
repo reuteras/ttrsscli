@@ -61,7 +61,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(filename="ttrsscli.log"),
-        logging.StreamHandler(),
     ],
 )
 logger: logging.Logger = logging.getLogger(name=__name__)
@@ -124,7 +123,7 @@ def get_conf_value(op_command: str) -> str:
             )
             sys.exit(1)
         except NameResolutionError:
-            logger.error("Error: Couldn't look up server for url.")
+            logger.error(msg="Error: Couldn't look up server for url.")
             print("Error: Couldn't look up server for url.")
             sys.exit(1)
     else:
@@ -217,16 +216,16 @@ class TTRSSClient:
             self.api.login()
 
             # Verify login status to make sure it worked
-            if hasattr(self.api, 'logged_in') and callable(getattr(self.api, 'logged_in')):
-                is_logged_in = self.api.logged_in()
+            if hasattr(self.api, 'logged_in') and callable(self.api.logged_in):
+                is_logged_in: bool = self.api.logged_in()
                 if not is_logged_in:
-                    logger.warning("Login appeared successful but session is not valid.")
+                    logger.warning(msg="Login appeared successful but session is not valid.")
                     return False
 
-            logger.info("Successfully authenticated with TTRSS")
+            logger.info(msg="Successfully authenticated with TTRSS")
             return True
         except Exception as e:
-            logger.error(f"Login failed: {e}")
+            logger.error(msg=f"Login failed: {e}")
             return False
 
     @handle_session_expiration
@@ -254,7 +253,7 @@ class TTRSSClient:
     @handle_session_expiration
     def get_feeds(self, cat_id, unread_only) -> list[Feed]:
         """Fetch feed list, retrying if session expires."""
-        cache_key = f"feeds_{cat_id}_{unread_only}"
+        cache_key: str = f"feeds_{cat_id}_{unread_only}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
@@ -332,17 +331,93 @@ class TTRSSClient:
 
         return response
 
+    # Modify this method in the TTRSSClient class in ttrsscli.py
     @handle_session_expiration
-    def get_feed_properties(self, feed_id) -> Any:
+    def get_feed_properties(self, feed_id) -> Any:  # noqa: PLR0912
         """Get properties for a specific feed."""
-        cache_key = f"feed_properties_{feed_id}"
+        cache_key: str = f"feed_properties_{feed_id}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
+        # Try to get feed properties directly
         feed_props = self.api.get_feed_properties(feed_id=feed_id)
-
+        
+        # If we got valid feed properties
         if feed_props:
+            # If the feed URL is missing, try to fetch it from feed tree
+            if not hasattr(feed_props, 'feed_url') or not feed_props.feed_url:  # type: ignore
+                try:
+                    # Get the feed tree to extract URL
+                    feed_tree = self.api.get_feed_tree(include_empty=True)
+                    
+                    # Define a recursive function to search for feed URL in the tree
+                    def find_feed_url(items, target_id):
+                        for item in items:
+                            if item.get('id') == f"FEED:{target_id}" and 'feed_url' in item:
+                                return item['feed_url']
+                            if 'items' in item:
+                                result = find_feed_url(items=item['items'], target_id=target_id)
+                                if result:
+                                    return result
+                        return None
+                    
+                    # Search for the feed URL in the tree
+                    if 'items' in feed_tree['content']:
+                        feed_url = find_feed_url(items=feed_tree['content']['items'], target_id=feed_id)
+                        if feed_url:
+                            # Add the feed_url attribute to feed_props
+                            feed_props.feed_url = feed_url  # type: ignore
+                except Exception as e:
+                    logger.debug(msg=f"Error retrieving feed URL from tree: {e}")
+            
+            # Cache the result
             self.cache[cache_key] = feed_props
+            
+        # If direct method failed, try to find the feed in all categories
+        if not feed_props:
+            logger.info(msg=f"Trying to find feed {feed_id} in all feeds")
+            all_feeds = []
+            try:
+                categories: list[Category] = self.get_categories()
+                for category in categories:
+                    try:
+                        feeds: list[Feed] = self.get_feeds(cat_id=category.id, unread_only=False) # type: ignore
+                        all_feeds.extend(feeds)
+                    except Exception as feed_err:
+                        logger.warning(msg=f"Error getting feeds for category {category.id}: {feed_err}") # type: ignore
+
+                # Find the feed in all_feeds
+                for feed in all_feeds:
+                    if int(feed.id) == int(feed_id):
+                        feed_props = feed
+                        
+                        # Try to get feed URL from feed tree if not available
+                        if not hasattr(feed_props, 'feed_url') or not feed_props.feed_url:
+                            try:
+                                feed_tree = self.api.get_feed_tree(include_empty=True)
+                                
+                                def find_feed_url(items, target_id):
+                                    for item in items:
+                                        if item.get('id') == f"FEED:{target_id}" and 'feed_url' in item:
+                                            return item['feed_url']
+                                        if 'items' in item:
+                                            result = find_feed_url(items=item['items'], target_id=target_id)
+                                            if result:
+                                                return result
+                                    return None
+                                
+                                if 'items' in feed_tree['content']:
+                                    feed_url = find_feed_url(items=feed_tree['content']['items'], target_id=feed_id)
+                                    if feed_url:
+                                        feed_props.feed_url = feed_url
+                            except Exception as e:
+                                logger.debug(msg=f"Error retrieving feed URL from tree: {e}")
+                        
+                        # Cache the result
+                        self.cache[cache_key] = feed_props
+                        break
+            except Exception as e:
+                logger.error(msg=f"Error searching all categories for feed: {e}")
 
         return feed_props
 
@@ -378,7 +453,7 @@ class TTRSSClient:
         for key in keys_to_remove:
             del self.cache[key]
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear the entire cache."""
         self.cache.clear()
 
@@ -562,8 +637,8 @@ class ConfirmScreen(ModalScreen):
             on_confirm: Callback function to run on confirmation
         """
         super().__init__()
-        self.dialog_title = title
-        self.message = message
+        self.dialog_title: str = title
+        self.message: str = message
         self.on_confirm = on_confirm
 
     def compose(self) -> ComposeResult:
@@ -604,7 +679,7 @@ class AddFeedScreen(ModalScreen):
         ("enter", "add_feed", "Add Feed"),
     ]
 
-    def __init__(self, client, category_id=None) -> None:
+    def __init__(self, client, category_id=0) -> None:
         """Initialize the add feed screen.
 
         Args:
@@ -613,13 +688,13 @@ class AddFeedScreen(ModalScreen):
         """
         super().__init__()
         self.client = client
-        self.category_id = category_id
-        self.feed_url = ""
-        self.feed_name = ""
-        self.login_user = ""
-        self.login_pass = ""
-        self.categories = []
-        self.selected_category = category_id
+        self.category_id: int = category_id
+        self.feed_url: str  = ""
+        self.feed_name:str = ""
+        self.login_user:str = ""
+        self.login_pass:str = ""
+        self.categories: list[tuple[str, str]] = [("", "")]
+        self.selected_category: int = category_id
         self._loading = False
 
     def compose(self) -> ComposeResult:
@@ -652,7 +727,7 @@ class AddFeedScreen(ModalScreen):
     def on_mount(self) -> None:
         """Set initial visibility and fetch categories."""
         # Hide progress bar initially
-        progress_container = self.query_one("#progress-container", Vertical)
+        progress_container: Vertical = self.query_one(selector="#progress-container", expect_type=Vertical)
         progress_container.styles.display = "none"
 
         # Fetch categories
@@ -663,17 +738,17 @@ class AddFeedScreen(ModalScreen):
         try:
             # Fetch categories for the dropdown
             categories = self.client.get_categories()
-            category_list = self.query_one("#category-list", ListView)
+            category_list: ListView = self.query_one(selector="#category-list", expect_type=ListView)
 
             for category in sorted(categories, key=lambda x: x.title):
                 if category.title != "Special":  # Skip special category
-                    item = ListItem(Label(category.title), id=f"cat_{category.id}")
-                    category_list.append(item)
+                    item = ListItem(Label(renderable=category.title), id=f"cat_{category.id}")
+                    category_list.append(item=item)
                     self.categories.append((category.id, category.title))
 
             # Select the provided category if any
             if self.category_id is not None:
-                for i, (cat_id, _) in enumerate(self.categories):
+                for i, (cat_id, _) in enumerate(iterable=self.categories):
                     if cat_id == self.category_id:
                         category_list.index = i
                         break
@@ -706,7 +781,7 @@ class AddFeedScreen(ModalScreen):
         """Handle category selection."""
         if event.list_view.id == "category-list" and event.list_view.index is not None:
             try:
-                self.selected_category = self.categories[event.list_view.index][0]
+                self.selected_category = int(self.categories[event.list_view.index][0])
             except IndexError:
                 # Handle case when the index is out of range
                 pass
@@ -723,13 +798,13 @@ class AddFeedScreen(ModalScreen):
 
         try:
             # Show progress indicator
-            progress_container = self.query_one("#progress-container", Vertical)
+            progress_container: Vertical = self.query_one(selector="#progress-container", expect_type=Vertical)
             progress_container.styles.display = "block"
             self._loading = True
 
             # Prepare authentication if provided
-            auth_login = self.login_user if self.login_user else None
-            auth_pass = self.login_pass if self.login_pass else None
+            auth_login: str | None = self.login_user if self.login_user else None
+            auth_pass: str | None = self.login_pass if self.login_pass else None
 
             # Add the feed
             result = self.client.subscribe_to_feed(
@@ -761,7 +836,7 @@ class AddFeedScreen(ModalScreen):
         except Exception as e:
             # Hide progress indicator if there's an error
             if self._loading:
-                progress_container = self.query_one("#progress-container", Vertical)
+                progress_container = self.query_one(selector="#progress-container", expect_type=Vertical)
                 progress_container.styles.display = "none"
                 self._loading = False
 
@@ -799,7 +874,7 @@ class EditFeedScreen(ModalScreen):
         self.current_title: str = title
         self.current_url: str = url
         self.feed_title: str = title
-        self.categories = []
+        self.categories: list[str] = []
         self.selected_category = None
         self.current_category_id = None
         self.feed_details = None
@@ -849,7 +924,7 @@ class EditFeedScreen(ModalScreen):
         progress_container: Vertical = self.query_one(selector="#progress-container", expect_type=Vertical)
         progress_container.styles.display = "none"
 
-    async def on_show(self) -> None:
+    async def on_show(self) -> None:  # noqa: PLR0912, PLR0915
         """Fetch categories and feed details when screen is shown."""
         try:
             # Show progress indicator
@@ -859,13 +934,13 @@ class EditFeedScreen(ModalScreen):
 
             # Fetch categories for the dropdown
             categories = self.client.get_categories()
-            category_list = self.query_one("#category-list", ListView)
+            category_list: ListView = self.query_one(selector="#category-list", expect_type=ListView)
 
             for category in sorted(categories, key=lambda x: x.title):
                 if category.title != "Special":  # Skip special category
-                    item = ListItem(Label(category.title), id=f"cat_{category.id}")
-                    category_list.append(item)
-                    self.categories.append((category.id, category.title))
+                    item = ListItem(Label(renderable=category.title), id=f"cat_{category.id}")
+                    category_list.append(item=item)
+                    self.categories.append((category.id, category.title)) # type: ignore
 
             # Fetch feed details using get_feed_properties with additional error handling
             try:
@@ -874,37 +949,47 @@ class EditFeedScreen(ModalScreen):
                 # Update feed URL if available in feed_details
                 if self.feed_details:
                     # Update the URL field if feed_url is available
-                    if hasattr(self.feed_details, "feed_url"):
+                    if hasattr(self.feed_details, "feed_url") and self.feed_details.feed_url:
                         self.current_url = self.feed_details.feed_url
-                        url_input = self.query_one("#feed-url-input", Input)
+                        url_input: Input = self.query_one(selector="#feed-url-input", expect_type=Input)
                         url_input.value = self.current_url
+                    elif self.current_url:  # Use the URL provided during initialization if available
+                        url_input = self.query_one(selector="#feed-url-input", expect_type=Input)
+                        url_input.value = self.current_url
+                    else:
+                        # Notify that URL couldn't be retrieved
                         self.notify(
                             title="Warning",
-                            message=f"Feed URL {self.current_url} is not editable.",
+                            message="Could not retrieve feed URL. This field will be display-only.",
                             severity="warning",
                             timeout=5)
 
                 if not self.feed_details:
                     # If get_feed_properties returns None, try to get feed info from all feeds
-                    logger.info(f"Trying to find feed {self.feed_id} in all feeds")
+                    logger.info(msg=f"Trying to find feed {self.feed_id} in all feeds")
                     all_feeds = []
                     for category in categories:
                         try:
                             feeds = self.client.get_feeds(cat_id=category.id, unread_only=False)
                             all_feeds.extend(feeds)
                         except Exception as feed_err:
-                            logger.warning(f"Error getting feeds for category {category.id}: {feed_err}")
+                            logger.warning(msg=f"Error getting feeds for category {category.id}: {feed_err}")
 
                     # Find the feed in all_feeds
                     for feed in all_feeds:
                         if int(feed.id) == int(self.feed_id):
                             self.feed_details = feed
+                            # Check for feed URL
+                            if hasattr(feed, "feed_url") and feed.feed_url:
+                                self.current_url = feed.feed_url
+                                url_input = self.query_one(selector="#feed-url-input", expect_type=Input)
+                                url_input.value = self.current_url
                             break
             except Exception as feed_error:
-                logger.error(f"Error fetching feed details: {feed_error}")
+                logger.error(msg=f"Error fetching feed details: {feed_error}")
                 self.notify(
                     title="Warning",
-                    message=f"Could not fetch complete feed details. Some settings may not be available.",
+                    message="Could not fetch complete feed details. Some settings may not be available.",
                     severity="warning",
                     timeout=5
                 )
@@ -921,14 +1006,14 @@ class EditFeedScreen(ModalScreen):
             if self.feed_details:
                 # Update feed values from details
                 if hasattr(self.feed_details, "title"):
-                    self.current_title = self.feed_details.title
-                    self.feed_title = self.feed_details.title
-                    title_input = self.query_one("#feed-title-input", Input)
+                    self.current_title = self.feed_details.title # type: ignore
+                    self.feed_title = self.feed_details.title # type: ignore
+                    title_input: Input = self.query_one(selector="#feed-title-input", expect_type=Input)
                     title_input.value = self.current_title
 
                 # Get current category
                 if hasattr(self.feed_details, "cat_id"):
-                    self.current_category_id = self.feed_details.cat_id
+                    self.current_category_id = self.feed_details.cat_id # type: ignore
 
                     # Select the current category in the list
                     for i, (cat_id, _) in enumerate(self.categories):
@@ -1424,13 +1509,13 @@ class LinkSelectionScreen(ModalScreen):
             from readwise.model import PostResponse
 
             # Show a progress indicator during the API call
-            self.push_screen("progress")
+            app.push_screen(screen="progress")
 
             # Save to Readwise
             response: tuple[bool, PostResponse] = readwise.save_document(url=link)
 
             # Remove progress screen
-            self.pop_screen()
+            app.pop_screen()
 
             if response[1].url and response[1].id:
                 self.notify(
@@ -1450,7 +1535,7 @@ class LinkSelectionScreen(ModalScreen):
         except Exception as err:
             # Make sure to remove progress screen if there's an error
             if isinstance(self.screen, ProgressScreen):
-                self.pop_screen()
+                app.pop_screen()
 
             logger.error(msg=f"Error saving to Readwise: {err}")
             self.notify(
@@ -1859,7 +1944,7 @@ class ttrsscli(App[None]):
         """Open screen to add a new feed."""
         try:
             # Determine if a category is selected
-            category_id = None
+            category_id: int = 0
             if (
                 hasattr(self, "category_id")
                 and self.category_id
@@ -1871,7 +1956,7 @@ class ttrsscli(App[None]):
             add_feed_screen = AddFeedScreen(client=self.client, category_id=category_id)
 
             # Push the screen and wait for result
-            result = await self.push_screen_wait(add_feed_screen)
+            result = await self.push_screen_wait(screen=add_feed_screen)
 
             # Refresh if a feed was added
             if result:
@@ -1889,8 +1974,8 @@ class ttrsscli(App[None]):
         """Open screen to edit the selected feed."""
         # Check if a feed is selected
         feed_id = None
-        feed_title = ""
-        feed_url = ""
+        feed_title: str = ""
+        feed_url: str = ""
 
         # Check if we're in the categories view with a feed selected
         if (
@@ -1927,7 +2012,7 @@ class ttrsscli(App[None]):
         edit_feed_screen = EditFeedScreen(
             client=self.client, feed_id=feed_id, title=feed_title, url=feed_url
         )
-        result = await self.push_screen_wait(edit_feed_screen)
+        result = await self.push_screen_wait(screen=edit_feed_screen)
 
         # Refresh if feed was updated or deleted
         if result:
@@ -2067,8 +2152,8 @@ class ttrsscli(App[None]):
 
         # Build tags
         tags: str = self.configuration.obsidian_default_tag + "  \n"
-        article_labels = ""
-        article_tags = ""
+        article_labels: str = ""
+        article_tags: str = ""
 
         if self.show_header and self.configuration.obsidian_include_labels:
             try:
@@ -2199,11 +2284,6 @@ class ttrsscli(App[None]):
         if self.first_view:
             self.first_view = False
             self.category_index = 1
-        elif list_view.index is None:
-            list_view.index = 1
-            self.category_index = 1
-        else:
-            list_view.index = self.category_index
         list_view.action_cursor_down()
 
     def action_open_original_article(self) -> None:
@@ -2218,7 +2298,7 @@ class ttrsscli(App[None]):
                 message="No article selected or no URL available.", title="Info"
             )
 
-    async def action_open_article_url(self):
+    async def action_open_article_url(self) -> None:
         """Open links from the article in a web browser."""
         if hasattr(self, "current_article_urls") and self.current_article_urls:
             self.push_screen(
@@ -2229,7 +2309,7 @@ class ttrsscli(App[None]):
         else:
             self.notify(message="No links found in article", title="Info")
 
-    def _extract_article_urls(self, soup):
+    def _extract_article_urls(self, soup) -> list[tuple[str, str]]:
         """Extract URLs from article content.
 
         Args:
@@ -2238,20 +2318,20 @@ class ttrsscli(App[None]):
         Returns:
             List of tuples with link title and URL
         """
-        urls = []
+        urls: list[tuple[str, str]] = []
         if soup is None:
             return urls
 
         for a in soup.find_all(name="a"):
             try:
-                href = a.get("href")
+                href: str = a.get("href")
                 if href:
-                    text = a.get_text().strip()
+                    text: str = a.get_text().strip()
                     if not text:  # If link text is empty
                         text = href  # Use the URL as the text
                     urls.append((text, self.get_clean_url(url=href)))
             except Exception as e:
-                logger.debug(f"Error processing link: {e}")
+                logger.debug(msg=f"Error processing link: {e}")
 
         return urls
 
@@ -2294,11 +2374,11 @@ class ttrsscli(App[None]):
 
             # Extract and process images if any
             for img in soup.find_all(name="img"):
-                if img.get("src"):
+                if img.get("src"): # type: ignore
                     # Replace with a placeholder or a note about the image
-                    img_text: str = f"[Image: {img.get('alt', 'No description')}]"
+                    img_text: str = f"[Image: {img.get('alt', 'No description')}]" # type: ignore
                     img.replace_with(soup.new_string(s=img_text))
-
+            
             # Extract URLs from article content
             self.current_article_urls = self._extract_article_urls(soup=soup)
 
@@ -2352,10 +2432,6 @@ class ttrsscli(App[None]):
         if self.first_view:
             self.first_view = False
             self.category_index = 0
-        elif list_view.index == 0:
-            pass
-        else:
-            list_view.index = self.category_index
         list_view.action_cursor_up()
 
     async def action_recently_read(self) -> None:
@@ -2577,7 +2653,7 @@ class ttrsscli(App[None]):
         if isinstance(self.screen, FullScreenTextArea):
             self.pop_screen()
         else:
-            self.push_screen(screen=FullScreenTextArea(text=str(self.content_markdown)))
+            self.push_screen(screen=FullScreenTextArea(text=str(object=self.content_markdown)))
 
     def _clean_markdown(self, markdown_text: str) -> str:
         """Clean up markdown text for better readability.
@@ -2611,10 +2687,10 @@ class ttrsscli(App[None]):
                 wrapped_lines.append(line)
             else:
                 # Wrap long text lines
-                wrapped: str = textwrap.fill(text=line, width=100)
+                wrapped: str = textwrap.fill(text=line, width=10000)
                 wrapped_lines.append(wrapped)
 
-        return "\n".join(wrapped_lines)
+        return "\n  ".join(wrapped_lines)
 
     def get_clean_url(self, url: str) -> str:
         """Clean URL using cleanurl if enabled.
@@ -2824,7 +2900,7 @@ class ttrsscli(App[None]):
             if categories:
                 # Sort categories by title
                 sorted_categories: list[Category] = sorted(
-                    categories, key=lambda x: x.title
+                    categories, key=lambda x: x.title  # type: ignore
                 )  # type: ignore
 
                 for category in sorted_categories:
@@ -2938,7 +3014,6 @@ class ttrsscli(App[None]):
 
 def main() -> None:
     """Run the ttcli app."""
-    app = ttrsscli()
     try:
         app.run()
     except KeyboardInterrupt:
@@ -2958,7 +3033,7 @@ def main_web() -> None:
     app = Server(command="ttrsscli")
     app.serve()
 
+app = ttrsscli()
 
 if __name__ == "__main__":
-    app = ttrsscli()
     app.run()
