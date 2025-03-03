@@ -10,7 +10,7 @@ from ttrsscli.ui.app import ttrsscli
 
 # Set up logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(filename="ttrsscli.log"),

@@ -1,25 +1,24 @@
-"""Custom widget for displaying terminal images in Textual."""
+"""Simplified terminal image widget for Textual."""
 
 import base64
 import io
 import logging
-import os
+import sys
 from pathlib import Path
 
 from PIL import Image
-from rich.console import RenderResult
-from rich.segment import Segment, Segments
-from rich.style import Style
 from rich.text import Text
+from rich_pixels import Pixels  # Use rich-pixels instead of custom rendering
 from textual.widget import Widget
 
-from ..utils.terminal_graphics import TerminalGraphics, TerminalType, detect_terminal
+from ttrsscli.ui.rich_widgets import detect_terminal
+from ttrsscli.utils.terminal_graphics import TerminalType
 
 logger = logging.getLogger(name=__name__)
 
 
 class TerminalImage(Widget):
-    """A widget that renders an image using terminal graphics protocols."""
+    """A widget that renders an image using rich-pixels for compatibility."""
 
     DEFAULT_CSS = """
     TerminalImage {
@@ -54,201 +53,223 @@ class TerminalImage(Widget):
         self.image_path = image_path
         self.max_width = max_width
         self.max_height = max_height
+        self.pixels = None
+        self.terminal_type: TerminalType = detect_terminal()
+        self.use_native_protocols = True
         
-        # Detect terminal for later rendering
-        self.terminal_type = detect_terminal()
-        logger.debug(f"Terminal image: detected terminal type = {self.terminal_type}")
-        
-        # Default to UNICODE for more compatibility in Textual apps
-        if self.terminal_type in (TerminalType.ITERM2, TerminalType.KITTY):
-            # Check if we're running in a Textual environment
-            # In that case, fall back to Unicode rendering for better compatibility
-            if "TEXTUAL" in os.environ or "RICH_CONSOLE" in os.environ:
-                logger.debug(f"Running in Textual, falling back to UNICODE rendering instead of {self.terminal_type}")
-                self.terminal_type = TerminalType.UNICODE
-        
-        self.graphics = TerminalGraphics(
-            max_width=max_width,
-            max_height=max_height,
-            prefer_protocol=self.terminal_type
-        )
-        
-        # Prepare image data
-        self._prepare_image()
+        # Load the image
+        self._load_image()
 
-    def _prepare_image(self) -> None:
-        """Prepare the image data for rendering."""
+    def _load_image(self) -> None:
+        """Load and prepare the image data for rendering."""
         try:
-            # Open and analyze the image
-            self.img = Image.open(self.image_path)
+            # Check if file exists
+            if not self.image_path.exists():
+                logger.error(f"Image file not found: {self.image_path}")
+                self.renderable = None
+                return
             
-            # Calculate dimensions based on terminal constraints
-            self.img = self.graphics._resize_image(self.img)
+            # Open the image
+            img = Image.open(self.image_path)
+            logger.debug(f"Loaded image {self.image_path}: mode={img.mode}, size={img.size}")
             
-            # Get original dimensions
-            self.width, self.height = self.img.size
-            
-            # For iTerm2/Kitty, prepare the base64 data
-            if self.terminal_type in (TerminalType.ITERM2, TerminalType.KITTY):
+            # Convert to RGB if needed
+            if img.mode == 'RGBA':
+                bg = Image.new('RGB', img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[3])
+                img = bg
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+                
+            # For iTerm2/Kitty with native protocols enabled, prepare high quality image
+            if self.use_native_protocols and self.terminal_type in (TerminalType.ITERM2, TerminalType.KITTY):
+                # Use larger size for high quality
+                orig_size = img.size
+                img.thumbnail((self.max_width * 10, self.max_height * 10))
+                logger.debug(f"Resized image for native rendering: {orig_size} -> {img.size}")
+                
+                # Store dimensions
+                self.width, self.height = img.size
+                
+                # Prepare base64 data
                 with io.BytesIO() as buf:
-                    self.img.save(buf, format='PNG')
+                    img.save(buf, format='PNG')
                     image_data = buf.getvalue()
                 self.b64_data = base64.b64encode(image_data).decode('ascii')
-            
-            # Get actual image content for different terminal types
-            if self.terminal_type == TerminalType.UNICODE:
-                # For Unicode half-blocks, convert to pixels once
-                rgb_img = self.img.convert('RGB')
-                self.pixels = list(rgb_img.getdata())
-                self.pixels = [self.pixels[i * self.width:(i + 1) * self.width] 
-                               for i in range(self.height)]
-            elif self.terminal_type == TerminalType.BLOCK:
-                # For block characters, convert to grayscale
-                gray_img = self.img.convert('L')
-                self.pixels = list(gray_img.getdata())
-                self.pixels = [self.pixels[i * self.width:(i + 1) * self.width] 
-                               for i in range(self.height)]
+                b64_len = len(self.b64_data)
+                logger.debug(f"Prepared image data: {b64_len} bytes encoded")
+                
+                # Mark for native rendering
+                self.renderable = "native"
+                logger.debug(f"Using native rendering for {self.image_path}")
+            else:
+                # For other terminals, use rich-pixels
+                orig_size = img.size
+                img.thumbnail((self.max_width, self.max_height))
+                logger.debug(f"Resized image for rich-pixels: {orig_size} -> {img.size}")
+                self.renderable = Pixels.from_image(img)
+                logger.debug(f"Using rich-pixels rendering for {self.image_path}")
+                
         except Exception as e:
-            logger.error(f"Error preparing image {self.image_path}: {e}")
-            # Set defaults for error state
-            self.img = None
-            self.width = 0
-            self.height = 0
-            self.pixels = []
+            logger.error(f"Error loading image {self.image_path}: {e}")
+            self.renderable = None
 
-    def render_line(self, y: int):  # noqa: PLR0911, PLR0912
-        """Render a single line of the image.
-        
-        Args:
-            y: Line number to render
-            
-        Returns:
-            List of segments to render
-        """
-        if not self.img:
-            return [Segment(f"[Image Error: {self.image_path.name}]")]
-        
-        try:
-            # Handle different terminal types
-            if self.terminal_type == TerminalType.ITERM2:
-                # iTerm2 protocol - only output on first line
-                if y == 0:
-                    # Format the escape sequence
-                    escape_seq = f"\x1b]1337;File=inline=1;width={self.width}px;height={self.height}px:{self.b64_data}\x07"
-                    return [Segment(escape_seq)]
-                else:
-                    # Other lines are empty to make space for the image
-                    return []
-            
-            elif self.terminal_type == TerminalType.KITTY:
-                # Kitty protocol - only output on first line
-                if y == 0:
-                    # Format the escape sequence
-                    escape_seq = f"\x1b_Ga=T,f=100,s={self.width},v={self.height}:{self.b64_data}\x1b\\"
-                    return [Segment(escape_seq)]
-                else:
-                    # Other lines are empty to make space for the image
-                    return []
-            
-            elif self.terminal_type == TerminalType.UNICODE:
-                # Unicode half-blocks - process two rows at a time
-                if y >= (self.height + 1) // 2 or not hasattr(self, 'pixels') or not self.pixels:
-                    return []
-                
-                segments = []
-                row_y = y * 2  # Each rendered line represents 2 pixel rows
-                
-                for x in range(self.width):
-                    # Get upper pixel
-                    upper = self.pixels[row_y][x]
-                    
-                    # Get lower pixel (if exists)
-                    if row_y + 1 < self.height:
-                        lower = self.pixels[row_y + 1][x]
-                    else:
-                        lower = upper  # Use upper pixel if at last row
-                    
-                    # Create a half-block with proper colors
-                    ur, ug, ub = upper
-                    lr, lg, lb = lower
-                    
-                    # Create rich-compatible style
-                    fg_style = f"rgb({ur},{ug},{ub})"
-                    bg_style = f"rgb({lr},{lg},{lb})"
-                    style = Style(color=fg_style, bgcolor=bg_style)
-                    
-                    # Add segment with half-block character
-                    segments.append(Segment("▀", style))
-                
-                return segments
-            
-            elif self.terminal_type == TerminalType.BLOCK:
-                # Block characters for basic terminals
-                if y >= self.height or not hasattr(self, 'pixels') or not self.pixels:
-                    return []
-                
-                # Define block characters for different brightness levels
-                blocks = " .:-=+*#%@"
-                
-                segments = []
-                for x in range(self.width):
-                    pixel = self.pixels[y][x]
-                    # Map grayscale value (0-255) to block character
-                    idx = min(9, pixel // 28)
-                    segments.append(Segment(blocks[idx]))
-                
-                return segments
-            
-            else:
-                # Fallback - just display image name
-                if y == 0:
-                    return [Segment(f"[Image: {self.image_path.name}]")]
-                return []
-                
-        except Exception as e:
-            logger.error(f"Error rendering line {y}: {e}")
-            if y == 0:
-                return [Segment(f"[Image Error: {e}]")]
-            return []
-            
-    def render(self) -> RenderResult:  # noqa: PLR0912
-        """Render the image widget.
-        
-        Returns:
-            RenderResult containing renderable objects for each line
-        """
-        # For iTerm2 and Kitty, we just need a single line with the escape sequence
-        if self.terminal_type in (TerminalType.ITERM2, TerminalType.KITTY):
-            segments_for_line = self.render_line(0)
-            if segments_for_line:
-                yield Segments(segments_for_line)
-            
-            # Add empty lines to create space for the image
-            for _ in range(1, (self.height + 1) // 2):
-                yield Text("")
-        
-        # For Unicode, we need half as many lines as the image height
-        elif self.terminal_type == TerminalType.UNICODE:
-            for y in range((self.height + 1) // 2):
-                segments_for_line = self.render_line(y)
-                if segments_for_line:
-                    yield Segments(segments_for_line)
-                else:
-                    yield Text("")
-        
-        # For block mode, we need as many lines as the image height
-        elif self.terminal_type == TerminalType.BLOCK:
-            for y in range(self.height):
-                segments_for_line = self.render_line(y)
-                if segments_for_line:
-                    yield Segments(segments_for_line)
-                else:
-                    yield Text("")
-        
-        # Fallback
+def render(self):
+    """Render the image.
+    
+    Returns:
+        Rich renderable object
+    """
+    if not hasattr(self, 'renderable') or self.renderable is None:
+        return Text(f"[Image Error: {self.image_path.name}]")
+    
+    if self.renderable == "native":
+        # Create appropriate escape sequence based on terminal type
+        if self.terminal_type == TerminalType.ITERM2:
+            # iTerm2 inline image protocol
+            escape_seq = f"\033]1337;File=inline=1;width={self.width}px;height={self.height}px:{self.b64_data}\007"
+            logger.debug(f"iTerm2 protocol: image size={self.width}x{self.height}, seq_len={len(escape_seq)}")
+            # Return as Text with a display placeholder, but the escape sequence will be processed by terminal
+            result = Text("📊")  # Use a placeholder character that will be replaced by the image
+            result._text = escape_seq  # Set the raw text to be the escape sequence
+            return result
+        elif self.terminal_type == TerminalType.KITTY:
+            # Kitty graphics protocol
+            escape_seq = f"\033_Ga=T,f=100,s={self.width},v={self.height}:{self.b64_data}\033\\"
+            logger.debug(f"Kitty protocol: image size={self.width}x{self.height}, seq_len={len(escape_seq)}")
+            result = Text("📊")
+            result._text = escape_seq
+            return result
         else:
-            segments_for_line = self.render_line(0)
-            if segments_for_line:
-                yield Segments(segments_for_line)
+            # Fallback to text if somehow we got here with an unsupported terminal
+            logger.warning(f"Native rendering requested but terminal {self.terminal_type} not supported")
+            return Text(f"[Image: {self.image_path.name}]")
+    else:
+        # Return the rich-pixels renderable
+        return self.renderable
+
+
+class DirectTerminalImage(Widget):
+    """Directly renders terminal images by writing to stdout."""
+
+    DEFAULT_CSS = """
+    DirectTerminalImage {
+        width: auto;
+        height: auto;
+        padding: 0;
+        margin: 0 1;
+    }
+    """
+
+    def __init__(  # noqa: PLR0913
+        self,
+        image_path: Path,
+        *,
+        max_width: int = 80,
+        max_height: int = 24,
+        name = None,
+        id = None,
+        classes = None,
+    ) -> None:
+        """Initialize the direct terminal image widget.
+
+        Args:
+            image_path: Path to the image file
+            max_width: Maximum width for the image
+            max_height: Maximum height for the image
+            name: Widget name
+            id: Widget ID
+            classes: CSS classes
+        """
+        super().__init__(name=name, id=id, classes=classes)
+        self.image_path = image_path
+        self.max_width = max_width
+        self.max_height = max_height
+        self.rendered = False
+        
+        # Detect terminal type
+        self.terminal_type = detect_terminal()
+        logger.debug(f"DirectTerminalImage using: {self.terminal_type}")
+
+    async def on_mount(self) -> None:
+        """When widget is mounted, render image directly to terminal."""
+        self.render_direct()
+
+    def render_direct(self) -> None:
+        """Render image directly to the terminal."""
+        if self.rendered:
+            return
+            
+        try:
+            # Only proceed for supported terminals
+            if self.terminal_type not in (TerminalType.ITERM2, TerminalType.KITTY):
+                logger.warning(f"Terminal {self.terminal_type} doesn't support native graphics")
+                return
+                
+            # Check if file exists
+            if not self.image_path.exists():
+                logger.error(f"Image file not found: {self.image_path}")
+                return
+                
+            # Open the image
+            img = Image.open(self.image_path)
+            
+            # Convert to RGB if needed
+            if img.mode == 'RGBA':
+                bg = Image.new('RGB', img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[3])
+                img = bg
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+                
+            # Use larger size for high quality
+            orig_size = img.size
+            img.thumbnail((self.max_width * 10, self.max_height * 10))
+            logger.debug(f"Direct rendering: Resized image: {orig_size} -> {img.size}")
+            
+            # Get dimensions
+            width, height = img.size
+            
+            # Prepare base64 data
+            with io.BytesIO() as buf:
+                img.save(buf, format='PNG')
+                image_data = buf.getvalue()
+            b64_data = base64.b64encode(image_data).decode('ascii')
+            
+            # Get appropriate escape sequence
+            if self.terminal_type == TerminalType.ITERM2:
+                # iTerm2 inline image protocol
+                escape_seq = f"\033]1337;File=inline=1;width={width}px;height={height}px:{b64_data}\007"
+            elif self.terminal_type == TerminalType.KITTY:
+                # Kitty graphics protocol
+                escape_seq = f"\033_Ga=T,f=100,s={width},v={height}:{b64_data}\033\\"
             else:
-                yield Text(f"[Image: {self.image_path.name}]")
+                return
+                
+            # Print escape sequence directly to terminal
+            # This bypasses Textual's rendering system completely
+            logger.debug(f"Direct rendering: Outputting {len(escape_seq)} bytes to terminal")
+            sys.stdout.write(escape_seq)
+            sys.stdout.flush()
+            
+            # Mark as rendered
+            self.rendered = True
+            
+        except Exception as e:
+            logger.error(f"Error in direct rendering: {e}")
+
+    def render(self):
+        """Render a placeholder for Textual's rendering system."""
+        # We've already done the real rendering directly,
+        # so just return a placeholder for Textual
+        height = 1
+        if self.terminal_type in (TerminalType.ITERM2, TerminalType.KITTY) and self.rendered:
+            # Reserve space equivalent to image height
+            height = max(1, min(self.max_height // 2, 10))
+            
+        # Return empty lines to reserve space
+        lines = []
+        for _ in range(height):
+            lines.append("")
+            
+        return Text("\n".join(lines))

@@ -16,7 +16,8 @@ from textual.widgets import Static
 
 from ..utils.image import ImageHandler
 from ..utils.rich_markdown import RichMarkdownRenderer
-from .terminal_image import TerminalImage
+from ..utils.terminal_graphics import TerminalType, detect_terminal
+from .terminal_image import DirectTerminalImage, TerminalImage
 
 logger = logging.getLogger(name=__name__)
 
@@ -125,6 +126,10 @@ class RichMarkdownView(ScrollView):
         self.max_image_height: int = max_image_height
         self.use_native_protocols: bool = use_native_protocols
         
+        # Log the configuration
+        logger.debug(f"RichMarkdownView initialized with: max_width={max_image_width}, " +
+                    f"max_height={max_image_height}, use_native_protocols={use_native_protocols}")
+        
         # Keep track of clickable areas
         self.link_regions: dict[Region, str] = {}
         self.hover_link: str = ""
@@ -139,7 +144,7 @@ class RichMarkdownView(ScrollView):
         
         # Image cache for current view
         self.images = {}
-        self.image_widgets= []
+        self.image_widgets = []
 
     def compose(self) -> ComposeResult:
         """Define the layout of the markdown viewer."""
@@ -182,32 +187,65 @@ class RichMarkdownView(ScrollView):
         """Render images below the markdown content."""
         # Remove any existing image widgets
         for widget in self.image_widgets:
-            await widget.remove()
+            try:
+                if widget.mounted:
+                    await widget.remove()
+            except Exception as e:
+                logger.error(f"Error removing image widget: {e}")
         self.image_widgets = []
+        
+        # Detect terminal type for making decisions
+        terminal_type = detect_terminal()
+        logger.debug(f"Rendering images with terminal type: {terminal_type}")
         
         # If we have images to display, create widgets for them
         for img_url, rendered in self.images.items():
             try:
                 if isinstance(rendered, Path):
-                    # This is a local file path - use TerminalImage widget
-                    img_widget = TerminalImage(
-                        image_path=rendered,
-                        max_width=self.max_image_width,
-                        max_height=self.max_image_height,
-                        classes="image-container"
-                    )
+                    # Choose appropriate image widget based on terminal and settings
+                    if (terminal_type in (TerminalType.ITERM2, TerminalType.KITTY) and 
+                        self.use_native_protocols):
+                        # Use direct rendering for iTerm2/Kitty with native graphics
+                        logger.debug(f"Using DirectTerminalImage for {img_url}")
+                        img_widget = DirectTerminalImage(
+                            image_path=rendered,
+                            max_width=self.max_image_width,
+                            max_height=self.max_image_height,
+                            classes="image-container"
+                        )
+                    else:
+                        # Fall back to regular TerminalImage for other terminals
+                        logger.debug(f"Using regular TerminalImage for {img_url}")
+                        img_widget = TerminalImage(
+                            image_path=rendered,
+                            max_width=self.max_image_width,
+                            max_height=self.max_image_height,
+                            use_native_protocols=self.use_native_protocols,
+                            classes="image-container"
+                        )
                 elif isinstance(rendered, Pixels):
                     # This is a Pixels object from rich-pixels
+                    from textual.widgets import Static
                     img_widget = Static(rendered, classes="image-container")
                 else:
                     # Fallback for any other case
+                    from textual.widgets import Static
                     img_widget = Static(f"[Image: {img_url.split('/')[-1]}]", classes="image-container")
                 
+                # Mount the widget
                 await self.mount(img_widget)
                 self.image_widgets.append(img_widget)
             except Exception as e:
-                logger.error(f"Error rendering image {img_url}: {e}")
-    
+                logger.error(f"Error creating image widget for {img_url}: {e}")
+                # Try to create a simple static widget as fallback
+                try:
+                    from textual.widgets import Static
+                    fallback = Static(f"[Error displaying image: {e}]", classes="image-container")
+                    await self.mount(fallback)
+                    self.image_widgets.append(fallback)
+                except Exception:
+                    pass  # If even the fallback fails, just skip this image
+
     async def on_click(self, event: Click) -> None:
         """Handle click events to support hyperlinks.
         

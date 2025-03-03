@@ -187,7 +187,8 @@ class ttrsscli(App[None]):
                     id="content", 
                     markdown=self.START_TEXT,
                     max_image_width=self.configuration.max_image_width,
-                    max_image_height=self.configuration.max_image_height
+                    max_image_height=self.configuration.max_image_height,
+                    use_native_protocols=self.configuration.use_native_graphics  # Add this line!
                 )
         yield Footer()
 

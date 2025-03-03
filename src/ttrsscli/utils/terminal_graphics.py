@@ -82,7 +82,7 @@ class TerminalGraphics:
         
         # Detect or use preferred terminal type
         self.terminal_type = prefer_protocol or detect_terminal()
-        logger.debug(f"Using terminal graphics protocol: {self.terminal_type}")
+        logger.debug(msg=f"Using terminal graphics protocol: {self.terminal_type}")
         
         # Scaling factors for different terminals
         # Some terminals have non-square character cells
