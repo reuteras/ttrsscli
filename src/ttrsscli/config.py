@@ -14,6 +14,52 @@ from urllib3.exceptions import NameResolutionError
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
+# Default configuration content
+DEFAULT_CONFIG = """[general]
+# Path to download folder (required for saving files)
+download_folder = "/Users/<username>/Downloads"
+# Whether to automatically mark articles as read when opened
+auto_mark_read = true
+# Size of the cache for storing article metadata
+cache_size = 10000
+# Default theme (dark or light)
+default_theme = "dark"
+
+[ttrss]
+# Tiny Tiny RSS API endpoint - can use op command for 1Password integration
+api_url = "https://your-ttrss-instance.com/api/"
+username = "your_username"
+password = "your_password"  # Or use 1Password CLI integration
+
+[readwise]
+# Readwise API token - can use op command for 1Password integration
+token = "your_readwise_token"  # Or use 1Password CLI integration
+
+[obsidian]
+# Obsidian integration settings
+vault = "YourVaultName"
+folder = "News"
+default_tag = "type/news"
+include_tags = true
+include_labels = true
+template = \"\"\"
+---
+id: <ID>
+created: <% tp.date.now() %>
+url: <URL>
+aliases:
+  - <TITLE>
+tags:
+  - created/y<% tp.date.now("YYYY") %>
+  - <TAGS>
+---
+
+<CONTENT>
+
+Last changed: `$= dv.current().file.mtime`
+\"\"\"
+"""
+
 def get_conf_value(op_command: str) -> str:
     """Get the configuration value from 1Password if config starts with 'op '.
 
@@ -72,6 +118,12 @@ class Configuration:
             default="config.toml",
         )
         arg_parser.add_argument(
+            "--create-config",
+            dest="create_config",
+            help="Create a default configuration file at the specified path",
+            metavar="PATH",
+        )
+        arg_parser.add_argument(
             "--version",
             action="store_true",
             dest="version",
@@ -99,8 +151,16 @@ class Configuration:
             except Exception as e:
                 print(f"Error getting version: {e}")
                 sys.exit(1)
+                
+        # Handle create-config argument
+        if args.create_config:
+            self.create_default_config(args.create_config)
+            print(f"Created default configuration at: {args.create_config}")
+            print("Please edit this file with your settings before running ttrsscli.")
+            sys.exit(0)
 
         self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
+
         try:
             self.api_url: str = get_conf_value(
                 op_command=self.config["ttrss"].get("api_url", "")
@@ -174,25 +234,45 @@ class Configuration:
             SystemExit: If the config file cannot be read
         """
         config_path = Path(config_file)
-        default_config_path = Path("config.toml-default")
 
         try:
             if not config_path.exists():
-                # If config file doesn't exist, try to use default config
-                if default_config_path.exists():
-                    print(
-                        f"Config file {config_file} not found. Creating from default."
-                    )
-                    config_path.write_text(data=default_config_path.read_text())
-                    print(
-                        f"Created {config_file} from default. Please edit it with your settings."
-                    )
-                else:
-                    print(f"Neither {config_file} nor {default_config_path} found.")
-                    sys.exit(1)
+                # If config file doesn't exist, create it from the default config
+                print(f"Config file {config_file} not found. Creating with default settings.")
+                config_path.write_text(data=DEFAULT_CONFIG)
+                print(f"Created {config_file} with default settings. Please edit it with your settings.")
+                sys.exit(1)
 
             return toml.loads(s=config_path.read_text())
         except (FileNotFoundError, toml.TomlDecodeError) as err:
             logger.error(msg=f"Error reading configuration file: {err}")
             print(f"Error reading configuration file: {err}")
+            sys.exit(1)
+
+    def create_default_config(self, config_path: str) -> None:
+        """Create a default configuration file at the specified path.
+        
+        Args:
+            config_path: Path where the configuration file should be created
+            
+        Raises:
+            SystemExit: If the file cannot be written
+        """
+        path = Path(config_path)
+        
+        # Create parent directories if they don't exist
+        if not path.parent.exists():
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                logger.error(msg=f"Error creating directory for config file: {e}")
+                print(f"Error creating directory for config file: {e}")
+                sys.exit(1)
+        
+        # Write the default configuration
+        try:
+            path.write_text(DEFAULT_CONFIG)
+        except Exception as e:
+            logger.error(msg=f"Error writing configuration file: {e}")
+            print(f"Error writing configuration file: {e}")
             sys.exit(1)

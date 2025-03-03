@@ -22,7 +22,15 @@ logger: logging.Logger = logging.getLogger(name=__name__)
 app = ttrsscli()
 
 def main() -> None:
-    """Run the ttrsscli app."""
+    """Run the ttrsscli app.
+    
+    Usage:
+        ttrsscli
+        ttrsscli --config path/to/config.toml
+        ttrsscli --create-config path/to/config.toml
+        ttrsscli --version
+        ttrsscli --help
+    """
     try:
         app.run()
     except KeyboardInterrupt:

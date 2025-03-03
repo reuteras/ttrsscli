@@ -1,6 +1,6 @@
 [project]
 name = "ttrsscli"
-version = "0.1.1"
+version = "0.1.2"
 authors = [
   { name="Peter Reuterås", email="peter@reuteras.net" },
 ]
@@ -9,6 +9,8 @@ readme = "README.md"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
 ]
 license = { text = "MIT" }
 requires-python = ">=3.11"
@@ -17,7 +19,6 @@ dependencies = [
     "cleanurl>=0.1.15",
     "httpx>=0.28.1",
     "markdownify>=0.14.1",
-    "pillow>=11.1.0",
     "readwise-api>=0.3.0",
     "requests>=2.32.3",
     "textual-serve>=1.1.1",

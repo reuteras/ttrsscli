@@ -21,35 +21,22 @@
 
 - Python 3.11+
 - Tiny Tiny RSS instance
-- `uv` for dependency installation
 - (Optional) [1Password CLI](https://developer.1password.com/docs/cli) for secure credential and configuration management
 
-### Install Dependencies
+### Install
 
-Checkout and install requirements.
-
-```sh
-git clone https://github.com/reuteras/ttrsscli.git && cd ttrsscli
-uv sync
-source .venv/bin/activate
+```
+uvx tool install ttrsscli
 ```
 
 ## Configuration
 
-Create a `config.toml` file in the same directory with the following structure:
-```toml
-[ttrss]
-api_url = "https://your-ttrss-instance.com/api/"
-username = "your_username"
-password = "your_password"  # Or "op read op://Private/ttrss/password --no-newline"" if using 1Password CLI
-```
+Create a `config.toml` file in the same directory with the following structure.
 
 ## Running
 
-Start `ttrsscli`.
-
 ```sh
-uv run ttrsscli
+ttrsscli
 ```
 
 ## Keyboard Shortcuts
