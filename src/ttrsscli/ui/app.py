@@ -461,6 +461,9 @@ class ttrsscli(App[None]):
         content_view: Widget = self.query_one(selector="#content")
         await content_view.remove()
 
+        logger.debug(msg=f"Content markdown length: {len(self.content_markdown)}")
+        logger.debug(msg=f"Content sample: {self.content_markdown[:100]}")
+
         # Then create and mount a new one
         new_viewer = LinkableMarkdownViewer(
             markdown=self.content_markdown, 
@@ -703,47 +706,59 @@ class ttrsscli(App[None]):
 
         try:
             article: Article = articles[0]
-            self.current_article = article
-
-            # Get clean URL and title
-            self.current_article_url: str = get_clean_url(
-                url=article.link,  # type: ignore
-                clean_url_enabled=self.clean_url
+        except IndexError:
+            self.notify(
+                title="Article",
+                message=f"No article found with ID {article_id}.",
+                timeout=5,
+                severity="error",
             )
-            self.current_article_title: str = article.title  # type: ignore
+            return
+    
+        self.current_article = article
 
-            # Extract links from article content
-            soup: BeautifulSoup = BeautifulSoup(markup=article.content, features="html.parser")  # type: ignore
-            
-            for link in soup.find_all(name="a"):
-                try:
-                    href: str = link.get("href", "")  # type: ignore
-                    if href:
-                        text: str = link.get_text().strip()
-                        if not text:
-                            text = href
-                        self.current_article_urls.append((text, href))
-                except Exception as e:
-                    logger.debug(msg=f"Error processing link: {e}")
+        # Get clean URL and title
+        self.current_article_url: str = get_clean_url(
+            url=article.link,  # type: ignore
+            clean_url_enabled=self.clean_url
+        )
+        self.current_article_title: str = article.title  # type: ignore
 
-            # Get article content
-            self.content_markdown_original: str = render_html_to_markdown(
-                html_content=article.content,  # type: ignore
-                clean_urls=self.clean_url
-            )
+        # Extract links from article content
+        soup: BeautifulSoup = BeautifulSoup(markup=article.content, features="html.parser")  # type: ignore
+        
+        for link in soup.find_all(name="a"):
+            try:
+                href: str = link.get("href", "")  # type: ignore
+                if href:
+                    text: str = link.get_text().strip()
+                    if not text:
+                        text = href
+                    self.current_article_urls.append((text, href))
+            except Exception as e:
+                logger.debug(msg=f"Error processing link: {e}")
 
-            # Extract links
-            self.current_article_urls = extract_links(
-                markdown_text=self.content_markdown_original
-            )
+        # Get article content
+        self.content_markdown_original: str = render_html_to_markdown(
+            html_content=article.content,  # type: ignore
+            clean_urls=self.clean_url
+        )   
+        
+        # Extract links
+        self.current_article_urls = extract_links(
+            markdown_text=self.content_markdown_original
+        )
 
-            # Add header information if enabled
-            header: str = self.get_header(article=article)
-            self.content_markdown = header + self.content_markdown_original
+        # Add header information if enabled
+        header: str = self.get_header(article=article)
+        self.content_markdown = header + self.content_markdown_original
 
+        # In display_article_content method
+        try:
             # Display the content using our markdown view
             content_view: Widget = self.query_one(selector="#content")
             await content_view.remove()
+            logger.debug("Removed old content view")
 
             # Then create and mount a new one
             new_viewer = LinkableMarkdownViewer(
@@ -752,22 +767,24 @@ class ttrsscli(App[None]):
                 show_table_of_contents=False, 
                 open_links=False
             )
+            logger.debug("Created new viewer")
+            
             content_container: Widget = self.query_one(selector="Vertical")
             await content_container.mount(new_viewer)
-
-            # Mark as read if auto-mark-read is enabled
-            if self.configuration.auto_mark_read:
-                self.client.mark_read(article_id=article_id)
-                await self.refresh_categories()
+            logger.debug("Mounted new viewer")
         except Exception as e:
-            logger.error(msg=f"Error processing article content: {e}")
+            logger.error(f"Error during viewer replacement: {e}")
             self.notify(
-                title="Error",
-                message=f"Error processing article: {e!s}",
+                title="Viewer Error",
+                message=f"Error displaying content: {e}",
                 timeout=5,
                 severity="error",
             )
-
+        # Mark as read if auto-mark-read is enabled
+        if self.configuration.auto_mark_read:
+            self.client.mark_read(article_id=article_id)
+            await self.refresh_categories()
+        
     def action_previous_article(self) -> None:
         """Open previous article."""
         self.last_key = "k"
