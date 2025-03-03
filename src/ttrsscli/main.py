@@ -6,7 +6,7 @@ import sys
 from ttrss.exceptions import TTRNotLoggedIn
 from urllib3.exceptions import NameResolutionError
 
-from .ui.app import ttrsscli
+from ttrsscli.ui.app import ttrsscli
 
 # Set up logging
 logging.basicConfig(
