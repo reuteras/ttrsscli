@@ -101,7 +101,7 @@ def get_conf_value(op_command: str) -> str:
 class Configuration:
     """A class to handle configuration values."""
 
-    def __init__(self, arguments) -> None:
+    def __init__(self, arguments) -> None:  # noqa: PLR0915
         """Initialize the configuration.
 
         Args:
@@ -115,7 +115,7 @@ class Configuration:
             "--config",
             dest="config",
             help="Path to the config file",
-            default="config.toml",
+            default="~/.ttrsscli.toml",
         )
         arg_parser.add_argument(
             "--create-config",
@@ -137,11 +137,22 @@ class Configuration:
             help="Enable debug logging",
             default=False,
         )
+        arg_parser.add_argument(
+            "--info",
+            action="store_true",
+            dest="info",
+            help="Enable info logging",
+            default=False,
+        )
         args: argparse.Namespace = arg_parser.parse_args(args=arguments)
 
         if args.debug:
             logger.setLevel(level=logging.DEBUG)
             logger.debug(msg="Debug mode enabled")
+
+        if args.info:
+            logger.setLevel(level=logging.INFO)
+            logger.info(msg="Info mode enabled")
 
         if args.version:
             try:
