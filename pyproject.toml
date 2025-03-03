@@ -25,8 +25,8 @@ dependencies = [
     "ttrss-python",
 ]
 [project.scripts]
-ttrsscli = "ttrsscli:main"
-ttrsscli-web = "ttrsscli:main_web"
+ttrsscli = "main:main"
+ttrsscli-web = "main:main_web"
 
 [project.urls]
 Homepage = "https://github.com/reuteras/ttrsscli"
