@@ -2,11 +2,9 @@
 
 import logging
 import webbrowser
-from pathlib import Path
 
 from rich.markdown import Markdown
 from rich.text import Text
-from rich_pixels import Pixels
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.events import Click
@@ -14,10 +12,7 @@ from textual.geometry import Region
 from textual.scroll_view import ScrollView
 from textual.widgets import Static
 
-from ..utils.image import ImageHandler
 from ..utils.rich_markdown import RichMarkdownRenderer
-from ..utils.terminal_graphics import TerminalType, detect_terminal
-from .terminal_image import DirectTerminalImage, TerminalImage
 
 logger = logging.getLogger(name=__name__)
 
@@ -66,7 +61,7 @@ class ClickableText(Text):
 
 
 class RichMarkdownView(ScrollView):
-    """A markdown viewer that uses Rich for rendering with support for images."""
+    """A markdown viewer that uses Rich for rendering."""
 
     DEFAULT_CSS = """
     RichMarkdownView {
@@ -80,12 +75,6 @@ class RichMarkdownView(ScrollView):
         width: 1fr;
         height: auto;
     }
-    
-    RichMarkdownView > .image-container {
-        width: 1fr;
-        height: auto;
-        margin: 1 0;
-    }
     """
     
     BINDINGS = [  # noqa: RUF012
@@ -97,14 +86,11 @@ class RichMarkdownView(ScrollView):
         Binding("page_down", "page_down", "Page Down", show=False),
     ]
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         markdown: str = "",
         *,
-        max_image_width: int = 80,
-        max_image_height: int = 20,
-        use_native_protocols: bool = True,
-        name= None,
+        name = None,
         id = None,
         classes = None,
     ) -> None:
@@ -112,9 +98,6 @@ class RichMarkdownView(ScrollView):
         
         Args:
             markdown: Initial markdown content
-            max_image_width: Maximum width for images
-            max_image_height: Maximum height for images
-            use_native_protocols: Whether to use native terminal graphics
             name: Widget name
             id: Widget ID
             classes: CSS classes
@@ -122,30 +105,14 @@ class RichMarkdownView(ScrollView):
         super().__init__(name=name, id=id, classes=classes)
         
         self._content: str = markdown
-        self.max_image_width: int = max_image_width
-        self.max_image_height: int = max_image_height
-        self.use_native_protocols: bool = use_native_protocols
-        
-        # Log the configuration
-        logger.debug(f"RichMarkdownView initialized with: max_width={max_image_width}, " +
-                    f"max_height={max_image_height}, use_native_protocols={use_native_protocols}")
         
         # Keep track of clickable areas
         self.link_regions: dict[Region, str] = {}
         self.hover_link: str = ""
         
-        # Set up renderers
+        # Set up renderer
         self.markdown_renderer = RichMarkdownRenderer()
-        self.image_handler = ImageHandler(
-            max_width=max_image_width,
-            max_height=max_image_height,
-            use_native_protocols=use_native_protocols
-        )
         
-        # Image cache for current view
-        self.images = {}
-        self.image_widgets = []
-
     def compose(self) -> ComposeResult:
         """Define the layout of the markdown viewer."""
         yield Static(id="markdown-container", expand=True)
@@ -163,88 +130,13 @@ class RichMarkdownView(ScrollView):
         """
         self._content = markdown
         
-        # Process the markdown with our renderer
-        clean_markdown, image_info = self.markdown_renderer.extract_images(markdown)
-        
         # Extract links for click handling
-        self.links = self.markdown_renderer.extract_links(clean_markdown)
+        self.links = self.markdown_renderer.extract_links(markdown)
         
-        # Process any images
-        if image_info:
-            self.images = self.image_handler.process_images(image_info)
-        else:
-            self.images = {}
-            
         # Render the markdown content
         markdown_container: Static = self.query_one(selector="#markdown-container", expect_type=Static)
-        rich_md: Markdown = self.markdown_renderer.render_markdown(markdown_text=clean_markdown)
+        rich_md: Markdown = self.markdown_renderer.render_markdown(markdown_text=markdown)
         await markdown_container.update(content=rich_md)
-        
-        # Render any images we found
-        await self._render_images()
-    
-    async def _render_images(self) -> None:
-        """Render images below the markdown content."""
-        # Remove any existing image widgets
-        for widget in self.image_widgets:
-            try:
-                if widget.mounted:
-                    await widget.remove()
-            except Exception as e:
-                logger.error(f"Error removing image widget: {e}")
-        self.image_widgets = []
-        
-        # Detect terminal type for making decisions
-        terminal_type = detect_terminal()
-        logger.debug(f"Rendering images with terminal type: {terminal_type}")
-        
-        # If we have images to display, create widgets for them
-        for img_url, rendered in self.images.items():
-            try:
-                if isinstance(rendered, Path):
-                    # Choose appropriate image widget based on terminal and settings
-                    if (terminal_type in (TerminalType.ITERM2, TerminalType.KITTY) and 
-                        self.use_native_protocols):
-                        # Use direct rendering for iTerm2/Kitty with native graphics
-                        logger.debug(f"Using DirectTerminalImage for {img_url}")
-                        img_widget = DirectTerminalImage(
-                            image_path=rendered,
-                            max_width=self.max_image_width,
-                            max_height=self.max_image_height,
-                            classes="image-container"
-                        )
-                    else:
-                        # Fall back to regular TerminalImage for other terminals
-                        logger.debug(f"Using regular TerminalImage for {img_url}")
-                        img_widget = TerminalImage(
-                            image_path=rendered,
-                            max_width=self.max_image_width,
-                            max_height=self.max_image_height,
-                            use_native_protocols=self.use_native_protocols,
-                            classes="image-container"
-                        )
-                elif isinstance(rendered, Pixels):
-                    # This is a Pixels object from rich-pixels
-                    from textual.widgets import Static
-                    img_widget = Static(rendered, classes="image-container")
-                else:
-                    # Fallback for any other case
-                    from textual.widgets import Static
-                    img_widget = Static(f"[Image: {img_url.split('/')[-1]}]", classes="image-container")
-                
-                # Mount the widget
-                await self.mount(img_widget)
-                self.image_widgets.append(img_widget)
-            except Exception as e:
-                logger.error(f"Error creating image widget for {img_url}: {e}")
-                # Try to create a simple static widget as fallback
-                try:
-                    from textual.widgets import Static
-                    fallback = Static(f"[Error displaying image: {e}]", classes="image-container")
-                    await self.mount(fallback)
-                    self.image_widgets.append(fallback)
-                except Exception:
-                    pass  # If even the fallback fails, just skip this image
 
     async def on_click(self, event: Click) -> None:
         """Handle click events to support hyperlinks.
@@ -282,5 +174,4 @@ class RichMarkdownView(ScrollView):
     def clear(self) -> None:
         """Clear the content."""
         self._content = ""
-        self.images = {}
         self.link_regions = {}

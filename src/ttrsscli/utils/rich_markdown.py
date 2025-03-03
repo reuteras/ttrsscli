@@ -37,17 +37,12 @@ class RichMarkdownRenderer:
         # Parse HTML
         soup = BeautifulSoup(markup=html_content, features="html.parser")
         
-        # Process and mark images for later handling
+        # Replace images with text descriptions
         for img in soup.find_all(name="img"):
             if img.get("src"): # type: ignore
-                # Mark images with a special tag that will be processed later
+                # Create a text placeholder for images
                 img_alt = img.get("alt", "No description") # type: ignore
-                img_src = img.get("src") # type: ignore
-                if self.clean_urls:
-                    img_src = get_clean_url(url=img_src) # type: ignore
-                
-                # Create a placeholder that we can find and replace later
-                img_placeholder = f"[IMG:{img_src}|{img_alt}]"
+                img_placeholder = f"[Image: {img_alt}]"
                 img.replace_with(soup.new_string(s=img_placeholder))
         
         # Clean up any code blocks to ensure proper rendering
@@ -109,37 +104,6 @@ class RichMarkdownRenderer:
         markdown_text = re.sub(r'```\n([^\n])', r'```\n\n\1', markdown_text)
         
         return markdown_text
-
-    def extract_images(self, markdown_text: str) -> tuple[str, list[dict[str, str]]]:
-        """Extract image placeholders from markdown for separate handling.
-        
-        Args:
-            markdown_text: Markdown text with image placeholders
-            
-        Returns:
-            Tuple containing:
-                - Updated markdown with image placeholders removed
-                - List of image information dictionaries
-        """
-        images = []
-        
-        # Find all image placeholders [IMG:url|alt]
-        img_pattern = r'\[IMG:([^|]+)\|([^\]]*)\]'
-        for match in re.finditer(img_pattern, markdown_text):
-            img_url = match.group(1)
-            img_alt = match.group(2)
-            
-            images.append({
-                "url": img_url,
-                "alt": img_alt,
-                "placeholder": match.group(0)
-            })
-        
-        # Remove image placeholders from markdown text
-        # (we'll handle them separately)
-        clean_markdown = re.sub(img_pattern, '', markdown_text)
-        
-        return clean_markdown, images
 
     def render_markdown(self, markdown_text: str) -> Markdown:
         """Render markdown text to a Rich Markdown object.
