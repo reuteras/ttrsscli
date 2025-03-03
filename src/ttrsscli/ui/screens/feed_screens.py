@@ -6,7 +6,16 @@ from typing import Any
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Input, Label, ListItem, ListView, ProgressBar, Static
+from textual.widgets import (
+    Button,
+    Checkbox,
+    Input,
+    Label,
+    ListItem,
+    ListView,
+    ProgressBar,
+    Static,
+)
 
 from ...ui.screens import ConfirmScreen
 

@@ -1,8 +1,9 @@
 """Markdown processing utilities for ttrsscli."""
 
+import logging
 import re
 import textwrap
-import logging
+
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md_converter
 
@@ -57,9 +58,9 @@ def html_to_markdown(html_content: str) -> str:
     
     # Replace images with placeholders
     for img in soup.find_all(name="img"):
-        if img.get("src"):
+        if img.get("src"): # type: ignore
             # Replace with a placeholder or a note about the image
-            img_text: str = f"[Image: {img.get('alt', 'No description')}]"
+            img_text: str = f"[Image: {img.get('alt', 'No description')}]" # type: ignore
             img.replace_with(soup.new_string(s=img_text))
     
     # Convert to markdown
@@ -85,7 +86,7 @@ def extract_links_from_html(soup: BeautifulSoup) -> list[tuple[str, str]]:
 
     for a in soup.find_all(name="a"):
         try:
-            href: str = a.get("href", "")
+            href: str = a.get("href", "") # type: ignore
             if href:
                 text: str = a.get_text().strip()
                 if not text:  # If link text is empty

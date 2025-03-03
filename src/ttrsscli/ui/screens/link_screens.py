@@ -10,8 +10,6 @@ from textual.app import ComposeResult
 from textual.screen import ModalScreen
 from textual.widgets import Label, ListItem, ListView
 
-from .progress import ProgressScreen
-
 logger = logging.getLogger(name=__name__)
 
 
@@ -300,7 +298,7 @@ class LinkSelectionScreen(ModalScreen):
                 )
         except Exception as err:
             # Make sure to remove progress screen if there's an error
-            if isinstance(self.screen, "ProgressScreen"):
+            if isinstance(self.screen, "ProgressScreen"): # type: ignore
                 self.app.pop_screen()
 
             logger.error(msg=f"Error saving to Readwise: {err}")

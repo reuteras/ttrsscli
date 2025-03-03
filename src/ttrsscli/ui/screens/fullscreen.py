@@ -1,6 +1,7 @@
 """Fullscreen content screens for ttrsscli."""
 
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 from textual.screen import Screen
 from textual.widgets import TextArea

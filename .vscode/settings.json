@@ -35,6 +35,7 @@
         "pyflakes",
         "pygments",
         "pylint",
+        "pytest",
         "pyupgrade",
         "readwise",
         "renderable",

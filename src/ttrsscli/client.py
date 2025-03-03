@@ -1,7 +1,6 @@
 """Client module for ttrsscli."""
 
 import logging
-from time import sleep
 from typing import Any
 
 from ttrss.client import Article, Category, Feed, Headline, TTRClient

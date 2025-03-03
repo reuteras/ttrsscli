@@ -1,12 +1,9 @@
 """Custom widgets for ttrsscli."""
 
 import webbrowser
-from typing import Any, Generator
 
 from textual import on
-from textual.message import Message
-from textual.widget import Widget
-from textual.widgets import Markdown, MarkdownViewer, TextArea
+from textual.widgets import Markdown, MarkdownViewer
 
 # Shared constants
 ALLOW_IN_FULL_SCREEN: list[str] = [

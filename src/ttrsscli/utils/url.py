@@ -1,6 +1,7 @@
 """URL utility functions for ttrsscli."""
 
 import logging
+
 from cleanurl import Result, cleanurl
 
 logger = logging.getLogger(name=__name__)

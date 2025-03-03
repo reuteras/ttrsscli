@@ -19,6 +19,7 @@ from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
+from textual.widget import Widget
 from textual.widgets import Footer, Header, ListItem, ListView, Static
 from ttrss.client import Article
 from ttrss.exceptions import TTRNotLoggedIn
