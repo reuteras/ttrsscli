@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 import httpx
+from bs4 import BeautifulSoup
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -27,8 +28,8 @@ from urllib3.exceptions import NameResolutionError
 from ..cache import LimitedSizeDict
 from ..client import TTRSSClient
 from ..config import Configuration
+from ..utils.markdown_converter import extract_links, render_html_to_markdown
 from ..utils.url import get_clean_url
-from .rich_widgets import RichMarkdownView
 from .screens import (
     AddFeedScreen,
     ConfirmMarkAllReadScreen,
@@ -41,6 +42,7 @@ from .screens import (
     ProgressScreen,
     SearchScreen,
 )
+from .widgets import LinkableMarkdownViewer
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
@@ -183,10 +185,7 @@ class ttrsscli(App[None]):
             yield ListView(id="categories")
             with Vertical():
                 yield ListView(id="articles")
-                yield RichMarkdownView(
-                    id="content", 
-                    markdown=self.START_TEXT
-                )
+                yield LinkableMarkdownViewer(markdown=self.START_TEXT, id="content", show_table_of_contents=False, open_links=False)
         yield Footer()
 
     async def on_list_view_highlighted(self, message: Message) -> None:
@@ -458,9 +457,10 @@ class ttrsscli(App[None]):
         except Exception:
             pass
 
-        # Update the content using RichMarkdownView
-        content_view = self.query_one("#content", RichMarkdownView)
-        await content_view.update(markdown=self.content_markdown)
+        # Update the content using LinkableMarkdownViewer
+        content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
+        await content_view.mount(LinkableMarkdownViewer(markdown=self.content_markdown, id="content", show_table_of_contents=False, open_links=False))
+
 
     def action_export_to_obsidian(self) -> None:  # noqa: PLR0912, PLR0915
         """Send the current content as a new note to Obsidian via URI scheme."""
@@ -702,18 +702,29 @@ class ttrsscli(App[None]):
                 clean_url_enabled=self.clean_url
             )
             self.current_article_title: str = article.title  # type: ignore
+
+            # Extract links from article content
+            soup: BeautifulSoup = BeautifulSoup(markup=article.content, features="html.parser")  # type: ignore
             
-            # Use our RichMarkdownRenderer for processing HTML
-            from ..utils.rich_markdown import RichMarkdownRenderer
-            rich_md_renderer = RichMarkdownRenderer(clean_urls=self.clean_url)
-            
-            # Convert HTML to markdown
-            self.content_markdown_original: str = rich_md_renderer.render_html_to_markdown(
-                html_content=article.content  # type: ignore
+            for link in soup.find_all(name="a"):
+                try:
+                    href: str = link.get("href", "")  # type: ignore
+                    if href:
+                        text: str = link.get_text().strip()
+                        if not text:
+                            text = href
+                        self.current_article_urls.append((text, href))
+                except Exception as e:
+                    logger.debug(msg=f"Error processing link: {e}")
+
+            # Get article content
+            self.content_markdown_original: str = render_html_to_markdown(
+                html_content=article.content,  # type: ignore
+                clean_urls=self.clean_url
             )
-            
+
             # Extract links
-            self.current_article_urls = rich_md_renderer.extract_links(
+            self.current_article_urls = extract_links(
                 markdown_text=self.content_markdown_original
             )
 
@@ -721,9 +732,10 @@ class ttrsscli(App[None]):
             header: str = self.get_header(article=article)
             self.content_markdown = header + self.content_markdown_original
 
-            # Display the content using our Rich markdown view
-            content_view = self.query_one("#content", RichMarkdownView)
-            await content_view.update(markdown=self.content_markdown)
+            # Display the content using our markdown view
+            content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
+            await content_view.remove()
+            await content_view.mount(LinkableMarkdownViewer(markdown=self.content_markdown, id="content", show_table_of_contents=False, open_links=False))
 
             # Mark as read if auto-mark-read is enabled
             if self.configuration.auto_mark_read:

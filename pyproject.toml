@@ -20,8 +20,6 @@ dependencies = [
     "pillow>=11.1.0",
     "readwise-api>=0.3.0",
     "requests>=2.32.3",
-    "rich>=13.9.4",
-    "rich-pixels>=3.0.1",
     "textual-serve>=1.1.1",
     "textual[syntax]>=1.0.0",
     "toml>=0.10.2",
@@ -42,7 +40,6 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pylint>=3.3.4",
-    "pytest>=8.3.4",
     "ruff>=0.9.5",
     "textual-dev>=1.7.0",
 ]

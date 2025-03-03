@@ -3,11 +3,11 @@
 from collections.abc import Generator
 from typing import Any
 
+from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import TextArea
 
-from ..rich_widgets import ComposeResult, RichMarkdownView
-from ..widgets import ALLOW_IN_FULL_SCREEN
+from ..widgets import ALLOW_IN_FULL_SCREEN, LinkableMarkdownViewer
 
 
 class FullScreenMarkdown(Screen):
@@ -25,8 +25,10 @@ class FullScreenMarkdown(Screen):
     def compose(self) -> ComposeResult:
         """Define the content layout of the full-screen Markdown viewer."""
         # Use our Rich markdown view instead of the standard LinkableMarkdownViewer
-        yield RichMarkdownView(
-            markdown=self.markdown_content
+        yield LinkableMarkdownViewer(
+            markdown=self.markdown_content,
+            show_table_of_contents=False,
+            open_links=False
         )
 
     def on_key(self, event) -> None:
