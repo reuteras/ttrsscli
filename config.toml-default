@@ -8,19 +8,25 @@ cache_size = 10000
 # Default theme (dark or light)
 default_theme = "dark"
 
+# Image display settings
+show_images = true  # Set to false to disable image display
+use_native_graphics = true  # Use terminal graphics protocols for better image quality
+max_image_width = 80  # Maximum width for images in terminal cells
+max_image_height = 24  # Maximum height for images in terminal cells
+
 [ttrss]
 # Tiny Tiny RSS API endpoint - can use op command for 1Password integration
-api_url = "op read op://Private/ttrss/url --no-newline"
-username = "op read op://Private/ttrss/login --no-newline"
-password = "op read op://Private/ttrss/API --no-newline"
+api_url = "https://your-ttrss-instance.com/api/"
+username = "your_username"
+password = "your_password"  # Or use 1Password CLI integration
 
 [readwise]
 # Readwise API token - can use op command for 1Password integration
-token = "op read op://Private/Readwise/API_TOKEN --no-newline"
+token = "your_readwise_token"  # Or use 1Password CLI integration
 
 [obsidian]
 # Obsidian integration settings
-vault = "Zettelkasten"
+vault = "YourVaultName"
 folder = "News"
 default_tag = "type/news"
 include_tags = true

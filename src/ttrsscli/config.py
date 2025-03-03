@@ -125,6 +125,12 @@ class Configuration:
             self.cache_size: int = general_config.get("cache_size", 10000)
             self.default_theme: str = general_config.get("default_theme", "dark")
 
+            # Image settings
+            self.show_images: bool = general_config.get("show_images", True)
+            self.use_native_graphics: bool = general_config.get("use_native_graphics", True)
+            self.max_image_width: int = general_config.get("max_image_width", 80)
+            self.max_image_height: int = general_config.get("max_image_height", 20)
+
             # Get readwise settings
             readwise_config = self.config.get("readwise", {})
             self.readwise_token: str = get_conf_value(

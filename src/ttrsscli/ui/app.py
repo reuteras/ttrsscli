@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 import httpx
-from bs4 import BeautifulSoup
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -28,8 +27,8 @@ from urllib3.exceptions import NameResolutionError
 from ..cache import LimitedSizeDict
 from ..client import TTRSSClient
 from ..config import Configuration
-from ..utils.markdown import extract_links_from_html, html_to_markdown
 from ..utils.url import get_clean_url
+from .rich_widgets import RichMarkdownView
 from .screens import (
     AddFeedScreen,
     ConfirmMarkAllReadScreen,
@@ -42,7 +41,6 @@ from .screens import (
     ProgressScreen,
     SearchScreen,
 )
-from .widgets import LinkableMarkdownViewer
 
 logger = logging.getLogger(name=__name__)
 
@@ -185,8 +183,11 @@ class ttrsscli(App[None]):
             yield ListView(id="categories")
             with Vertical():
                 yield ListView(id="articles")
-                yield LinkableMarkdownViewer(
-                    id="content", show_table_of_contents=False, markdown=self.START_TEXT
+                yield RichMarkdownView(
+                    id="content", 
+                    markdown=self.START_TEXT,
+                    max_image_width=self.configuration.max_image_width,
+                    max_image_height=self.configuration.max_image_height
                 )
         yield Footer()
 
@@ -459,10 +460,9 @@ class ttrsscli(App[None]):
         except Exception:
             pass
 
-        content_view: LinkableMarkdownViewer = self.query_one(
-            selector="#content", expect_type=LinkableMarkdownViewer
-        )
-        await content_view.document.update(markdown=self.content_markdown)
+        # Update the content using RichMarkdownView
+        content_view = self.query_one("#content", RichMarkdownView)
+        await content_view.update(markdown=self.content_markdown)
 
     def action_export_to_obsidian(self) -> None:  # noqa: PLR0912, PLR0915
         """Send the current content as a new note to Obsidian via URI scheme."""
@@ -698,31 +698,34 @@ class ttrsscli(App[None]):
             article: Article = articles[0]
             self.current_article = article
 
-            # Parse and clean the HTML
-            soup = BeautifulSoup(markup=article.content, features="html.parser")  # type: ignore
+            # Get clean URL and title
             self.current_article_url: str = get_clean_url(
                 url=article.link,  # type: ignore
                 clean_url_enabled=self.clean_url
             )
             self.current_article_title: str = article.title  # type: ignore
             
-            # Extract URLs from article content
-            self.current_article_urls = extract_links_from_html(soup=soup)
-
-            # Convert HTML to markdown
-            self.content_markdown_original: str = html_to_markdown(
-                html_content=str(object=soup)
+            # Use our RichMarkdownRenderer for processing HTML
+            from ..utils.rich_markdown import RichMarkdownRenderer
+            rich_md_renderer = RichMarkdownRenderer(clean_urls=self.clean_url)
+            
+            # Convert HTML to markdown (this also extracts images)
+            self.content_markdown_original: str = rich_md_renderer.render_html_to_markdown(
+                html_content=article.content  # type: ignore
+            )
+            
+            # Extract links
+            self.current_article_urls = rich_md_renderer.extract_links(
+                markdown_text=self.content_markdown_original
             )
 
             # Add header information if enabled
             header: str = self.get_header(article=article)
             self.content_markdown = header + self.content_markdown_original
 
-            # Display the cleaned content
-            content_view: LinkableMarkdownViewer = self.query_one(
-                selector="#content", expect_type=LinkableMarkdownViewer
-            )
-            await content_view.document.update(markdown=self.content_markdown)
+            # Display the content using our Rich markdown view
+            content_view = self.query_one("#content", RichMarkdownView)
+            await content_view.update(markdown=self.content_markdown)
 
             # Mark as read if auto-mark-read is enabled
             if self.configuration.auto_mark_read:
