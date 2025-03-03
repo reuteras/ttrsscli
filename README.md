@@ -29,15 +29,9 @@
 uvx tool install ttrsscli
 ```
 
-## Configuration
+Create a _config.toml_ file by running by running `ttrsscli` once. 
 
-Create a `config.toml` file in the same directory with the following structure.
-
-## Running
-
-```sh
-ttrsscli
-```
+After that you can just run `ttrsscli`.
 
 ## Keyboard Shortcuts
 
