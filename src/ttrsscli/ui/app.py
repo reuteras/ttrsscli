@@ -1053,6 +1053,7 @@ class ttrsscli(App[None]):
             ("note", "Note"),
             ("feed_title", "Feed"),
             ("lang", "Language"),
+            ("feed_id", "Feed ID"),
         ]:
             value = getattr(article, field, None)
             if value:
