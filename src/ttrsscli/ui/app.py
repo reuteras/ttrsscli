@@ -458,9 +458,18 @@ class ttrsscli(App[None]):
             pass
 
         # Update the content using LinkableMarkdownViewer
-        content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
-        await content_view.mount(LinkableMarkdownViewer(markdown=self.content_markdown, id="content", show_table_of_contents=False, open_links=False))
+        content_view: Widget = self.query_one(selector="#content")
+        await content_view.remove()
 
+        # Then create and mount a new one
+        new_viewer = LinkableMarkdownViewer(
+            markdown=self.content_markdown, 
+            id="content", 
+            show_table_of_contents=False, 
+            open_links=False
+        )
+        content_container: Widget = self.query_one(selector="Vertical")
+        await content_container.mount(new_viewer)
 
     def action_export_to_obsidian(self) -> None:  # noqa: PLR0912, PLR0915
         """Send the current content as a new note to Obsidian via URI scheme."""
@@ -733,9 +742,18 @@ class ttrsscli(App[None]):
             self.content_markdown = header + self.content_markdown_original
 
             # Display the content using our markdown view
-            content_view: LinkableMarkdownViewer = self.query_one(selector="#content", expect_type=LinkableMarkdownViewer)
+            content_view: Widget = self.query_one(selector="#content")
             await content_view.remove()
-            await content_view.mount(LinkableMarkdownViewer(markdown=self.content_markdown, id="content", show_table_of_contents=False, open_links=False))
+
+            # Then create and mount a new one
+            new_viewer = LinkableMarkdownViewer(
+                markdown=self.content_markdown, 
+                id="content", 
+                show_table_of_contents=False, 
+                open_links=False
+            )
+            content_container: Widget = self.query_one(selector="Vertical")
+            await content_container.mount(new_viewer)
 
             # Mark as read if auto-mark-read is enabled
             if self.configuration.auto_mark_read:
