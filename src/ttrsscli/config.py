@@ -145,6 +145,12 @@ class Configuration:
             help="Enable info logging",
             default=False,
         )
+        arg_parser.add_argument(
+            "--error-log",
+            dest="error_log",
+            help="Path to error log file",
+            default="/dev/null",
+        )
         args: argparse.Namespace = arg_parser.parse_args(args=arguments)
 
         if args.debug:
@@ -171,6 +177,15 @@ class Configuration:
             print("Please edit this file with your settings before running ttrsscli.")
             sys.exit(0)
 
+        # Set up error logging
+        logging.basicConfig(
+            level=logging.ERROR,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[
+                logging.FileHandler(filename=args.error_log),
+            ],
+        )
+        
         self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
 
         try:
