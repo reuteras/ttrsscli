@@ -111,11 +111,12 @@ class Configuration:
         arg_parser = argparse.ArgumentParser(
             description="A Textual app to access and read articles from Tiny Tiny RSS."
         )
+        config_file_location: Path = Path.home() / ".ttrsscli.toml"
         arg_parser.add_argument(
             "--config",
             dest="config",
             help="Path to the config file",
-            default="~/.ttrsscli.toml",
+            default=config_file_location,
         )
         arg_parser.add_argument(
             "--create-config",
