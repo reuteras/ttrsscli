@@ -12,7 +12,7 @@ from typing import Any
 import toml
 from urllib3.exceptions import NameResolutionError
 
-logger = logging.getLogger(name=__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 def get_conf_value(op_command: str) -> str:
     """Get the configuration value from 1Password if config starts with 'op '.

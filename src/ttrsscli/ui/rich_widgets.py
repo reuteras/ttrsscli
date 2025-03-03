@@ -14,7 +14,7 @@ from textual.widgets import Static
 
 from ..utils.rich_markdown import RichMarkdownRenderer
 
-logger = logging.getLogger(name=__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 
 class ClickableText(Text):
@@ -32,14 +32,14 @@ class ClickableText(Text):
             text: Link text to display
             url: URL the link points to
         """
-        start = len(self)
-        self.append(text)
-        end = len(self)
+        start: int = len(self)
+        self.append(text=text)
+        end: int = len(self)
         
-        self.stylize(f"link {url}", start, end)
+        self.stylize(style=f"link {url}", start=start, end=end)
         self.hyperlinks[url] = text
         
-    def get_link_at(self, x: int):
+    def get_link_at(self, x: int) -> str:
         """Get URL at the given position if it exists.
         
         Args:
@@ -52,12 +52,12 @@ class ClickableText(Text):
             style = span[1]
             if hasattr(style, "meta") and style.meta: # type: ignore
                 if "link" in style.meta: # type: ignore
-                    link_url = style.meta["link"] # type: ignore
-                    span_range = span[0]
+                    link_url: str = style.meta["link"] # type: ignore
+                    span_range: int = span[0]
                     if span_range.start <= x < span_range.end: # type: ignore
                         return link_url
                         
-        return None
+        return ""
 
 
 class RichMarkdownView(ScrollView):
@@ -78,12 +78,12 @@ class RichMarkdownView(ScrollView):
     """
     
     BINDINGS = [  # noqa: RUF012
-        Binding("up", "scroll_up", "Scroll Up", show=False),
-        Binding("down", "scroll_down", "Scroll Down", show=False),
-        Binding("home", "scroll_home", "Scroll Home", show=False),
-        Binding("end", "scroll_end", "Scroll End", show=False),
-        Binding("page_up", "page_up", "Page Up", show=False),
-        Binding("page_down", "page_down", "Page Down", show=False),
+        Binding(key="up", action="scroll_up", description="Scroll Up", show=False),
+        Binding(key="down", action="scroll_down", description="Scroll Down", show=False),
+        Binding(key="home", action="scroll_home", description="Scroll Home", show=False),
+        Binding(key="end", action="scroll_end", description="Scroll End", show=False),
+        Binding(key="page_up", action="page_up", description="Page Up", show=False),
+        Binding(key="page_down", action="page_down", description="Page Down", show=False),
     ]
 
     def __init__(
@@ -131,7 +131,7 @@ class RichMarkdownView(ScrollView):
         self._content = markdown
         
         # Extract links for click handling
-        self.links = self.markdown_renderer.extract_links(markdown)
+        self.links = self.markdown_renderer.extract_links(markdown_text=markdown)
         
         # Render the markdown content
         markdown_container: Static = self.query_one(selector="#markdown-container", expect_type=Static)
@@ -145,14 +145,15 @@ class RichMarkdownView(ScrollView):
             event: Click event
         """
         # Get the position relative to the content
-        screen_x, screen_y = event.screen_x, event.screen_y
-        rel_y = screen_y - self.region.y - self.scroll_offset.y
-        rel_x = screen_x - self.region.x
+        screen_x: int = event.screen_x
+        screen_y: int = event.screen_y
+        rel_y: int = screen_y - self.region.y - self.scroll_offset.y
+        rel_x: int = screen_x - self.region.x
         
         # Check if we're clicking on a link
         for region, url in self.link_regions.items():
-            if region.contains_point(rel_x, rel_y):
-                await self._handle_link_click(url)
+            if region.contains_point(point=(rel_x, rel_y)):
+                await self._handle_link_click(url=url)
                 break
 
     async def _handle_link_click(self, url: str) -> None:
@@ -164,9 +165,9 @@ class RichMarkdownView(ScrollView):
         try:
             webbrowser.open(url)
         except Exception as e:
-            logger.error(f"Error opening URL {url}: {e}")
+            logger.error(msg=f"Error opening URL {url}: {e}")
             self.notify(
-                f"Error opening URL: {e}",
+                message=f"Error opening URL: {e}",
                 title="Link Error",
                 severity="error"
             )

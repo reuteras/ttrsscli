@@ -10,13 +10,13 @@ from ttrsscli.ui.app import ttrsscli
 
 # Set up logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(filename="ttrsscli.log"),
     ],
 )
-logger = logging.getLogger(name=__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 # Create the application instance 
 app = ttrsscli()

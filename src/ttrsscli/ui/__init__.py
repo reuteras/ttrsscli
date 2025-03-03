@@ -2,4 +2,4 @@
 
 from .app import ttrsscli
 
-__all__ = ["ttrsscli"]
+__all__: list[str] = ["ttrsscli"]

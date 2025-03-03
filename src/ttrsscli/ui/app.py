@@ -42,7 +42,7 @@ from .screens import (
     SearchScreen,
 )
 
-logger = logging.getLogger(name=__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 
 class ttrsscli(App[None]):

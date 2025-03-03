@@ -8,7 +8,7 @@ from .link_screens import LinkSelectionScreen
 from .progress import ProgressScreen
 from .search import SearchScreen
 
-__all__ = [
+__all__: list[str] = [
     "AddFeedScreen",
     "ConfirmMarkAllReadScreen",
     "ConfirmScreen",

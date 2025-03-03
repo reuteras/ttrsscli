@@ -7,7 +7,7 @@ import textwrap
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md_converter
 
-logger = logging.getLogger(name=__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 def clean_markdown(markdown_text: str) -> str:
     """Clean up markdown text for better readability.

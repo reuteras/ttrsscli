@@ -7,7 +7,7 @@ from ttrss.client import Article, Category, Feed, Headline, TTRClient
 
 from .utils.decorators import handle_session_expiration
 
-logger = logging.getLogger(name=__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 
 class TTRSSClient:
@@ -166,7 +166,7 @@ class TTRSSClient:
             return self.cache[cache_key]
 
         # Try to get feed properties directly
-        feed_props = self.api.get_feed_properties(feed_id=feed_id)
+        feed_props: None | Feed = self.api.get_feed_properties(feed_id=feed_id)
         
         # If we got valid feed properties
         if feed_props:
@@ -218,7 +218,7 @@ class TTRSSClient:
                         feed_props = feed
                         
                         # Try to get feed URL from feed tree if not available
-                        if not hasattr(feed_props, 'feed_url') or not feed_props.feed_url:
+                        if not feed_props is None and (not hasattr(feed_props, 'feed_url') or (hasattr(feed_props, 'feed_url') and not feed_props.feed_url)): # type: ignore
                             try:
                                 feed_tree = self.api.get_feed_tree(include_empty=True)
                                 
@@ -235,7 +235,7 @@ class TTRSSClient:
                                 if 'items' in feed_tree['content']:
                                     feed_url = find_feed_url(items=feed_tree['content']['items'], target_id=feed_id)
                                     if feed_url:
-                                        feed_props.feed_url = feed_url
+                                        feed_props.feed_url = feed_url # type: ignore
                             except Exception as e:
                                 logger.debug(msg=f"Error retrieving feed URL from tree: {e}")
                         
@@ -265,7 +265,7 @@ class TTRSSClient:
         return response
 
     @handle_session_expiration
-    def mark_all_read(self, feed_id, is_cat=False):
+    def mark_all_read(self, feed_id, is_cat=False) -> bool:
         """Mark all articles in a feed as read, retrying if session expires."""
         try:
             # Use catchup_feed to mark all articles in a specific feed as read
@@ -279,7 +279,7 @@ class TTRSSClient:
 
     def _invalidate_headline_cache(self) -> None:
         """Invalidate all headline cache entries."""
-        keys_to_remove = [k for k in self.cache if k.startswith("headlines_")]
+        keys_to_remove: list[str] = [k for k in self.cache if k.startswith("headlines_")]
         for key in keys_to_remove:
             del self.cache[key]
 

@@ -79,8 +79,8 @@ class ConfirmMarkAllReadScreen(ModalScreen):
         """
         super().__init__()
         self.feed_id = feed_id
-        self.is_cat = is_cat
-        self.feed_title = feed_title
+        self.is_cat: bool = is_cat
+        self.feed_title: str = feed_title
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the confirmation screen."""

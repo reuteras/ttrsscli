@@ -3,7 +3,7 @@
 import logging
 from collections import OrderedDict
 
-logger = logging.getLogger(name=__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 class LimitedSizeDict(OrderedDict):
     """A dictionary that holds at most 'max_size' items and removes the oldest when full."""

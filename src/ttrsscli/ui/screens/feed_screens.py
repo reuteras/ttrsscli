@@ -19,7 +19,7 @@ from textual.widgets import (
 
 from ...ui.screens import ConfirmScreen
 
-logger = logging.getLogger(name=__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 
 class AddFeedScreen(ModalScreen):

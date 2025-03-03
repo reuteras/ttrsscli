@@ -4,7 +4,7 @@ import logging
 
 from cleanurl import Result, cleanurl
 
-logger = logging.getLogger(name=__name__)
+logger: logging.Logger = logging.getLogger(name=__name__)
 
 def get_clean_url(url: str, clean_url_enabled: bool = True) -> str:
     """Clean URL using cleanurl if enabled.
