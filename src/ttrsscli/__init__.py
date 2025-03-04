@@ -1,6 +1,6 @@
 """ttrsscli - A CLI Tool for Tiny Tiny RSS.
 
-A terminal-based application that provides a text user interface (TUI) for reading 
+A terminal-based application that provides a text user interface (TUI) for reading
 articles from a Tiny Tiny RSS instance.
 """
 

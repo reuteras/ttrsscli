@@ -18,12 +18,12 @@ logging.basicConfig(
 )
 logger: logging.Logger = logging.getLogger(name=__name__)
 
-# Create the application instance 
+# Create the application instance
 app = ttrsscli()
 
 def main() -> None:
     """Run the ttrsscli app.
-    
+
     Usage:
         ttrsscli
         ttrsscli --config path/to/config.toml

@@ -87,7 +87,7 @@ class ConfirmMarkAllReadScreen(ModalScreen):
         with Container(id="confirm-small-container"):
             yield Label(renderable="Mark All As Read", id="confirm-title")
             yield Label(
-                renderable=f"Mark all articles in '{self.feed_title}' as read?", 
+                renderable=f"Mark all articles in '{self.feed_title}' as read?",
                 id="confirm-message"
             )
             with Horizontal(id="confirm-buttons"):

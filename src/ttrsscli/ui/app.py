@@ -94,7 +94,7 @@ class ttrsscli(App[None]):
         ("u", "toggle_unread", "Toggle unread only"),
         ("v", "show_version", "Show version"),
     ]
-    
+
     SCREENS: ClassVar[dict[str, type[Screen]]] = {
         "add_feed": AddFeedScreen,
         "confirm": ConfirmScreen,
@@ -466,9 +466,9 @@ class ttrsscli(App[None]):
 
         # Then create and mount a new one
         new_viewer = LinkableMarkdownViewer(
-            markdown=self.content_markdown, 
-            id="content", 
-            show_table_of_contents=False, 
+            markdown=self.content_markdown,
+            id="content",
+            show_table_of_contents=False,
             open_links=False
         )
         content_container: Widget = self.query_one(selector="Vertical")
@@ -714,7 +714,7 @@ class ttrsscli(App[None]):
                 severity="error",
             )
             return
-    
+
         self.current_article = article
 
         # Get clean URL and title
@@ -726,7 +726,7 @@ class ttrsscli(App[None]):
 
         # Extract links from article content
         soup: BeautifulSoup = BeautifulSoup(markup=article.content, features="html.parser")  # type: ignore
-        
+
         for link in soup.find_all(name="a"):
             try:
                 href: str = link.get("href", "")  # type: ignore
@@ -742,8 +742,8 @@ class ttrsscli(App[None]):
         self.content_markdown_original: str = render_html_to_markdown(
             html_content=article.content,  # type: ignore
             clean_urls=self.clean_url
-        )   
-        
+        )
+
         # Extract links
         self.current_article_urls = extract_links(
             markdown_text=self.content_markdown_original
@@ -762,13 +762,13 @@ class ttrsscli(App[None]):
 
             # Then create and mount a new one
             new_viewer = LinkableMarkdownViewer(
-                markdown=self.content_markdown, 
-                id="content", 
-                show_table_of_contents=False, 
+                markdown=self.content_markdown,
+                id="content",
+                show_table_of_contents=False,
                 open_links=False
             )
             logger.debug("Created new viewer")
-            
+
             content_container: Widget = self.query_one(selector="Vertical")
             await content_container.mount(new_viewer)
             logger.debug("Mounted new viewer")
@@ -784,7 +784,7 @@ class ttrsscli(App[None]):
         if self.configuration.auto_mark_read:
             self.client.mark_read(article_id=article_id)
             await self.refresh_categories()
-        
+
     def action_previous_article(self) -> None:
         """Open previous article."""
         self.last_key = "k"
@@ -910,7 +910,7 @@ class ttrsscli(App[None]):
     def action_show_version(self) -> None:
         """Show version information."""
         from importlib import metadata
-        
+
         version_info: str = (
             f"ttrsscli version: {self.configuration.version}\n"
             f"Python: {sys.version.split()[0]}\n"
@@ -965,12 +965,12 @@ class ttrsscli(App[None]):
         if hasattr(self, "article_id") and self.article_id:
             try:
                 self.client.toggle_unread(article_id=self.article_id)
-                self.notify(message="Article status toggled", title="Info")
+                self.notify(message="Article read status toggled", title="Info")
             except Exception as e:
-                logger.error(msg=f"Error toggling article status: {e}")
+                logger.error(msg=f"Error toggling article read status: {e}")
                 self.notify(
                     title="Error",
-                    message=f"Failed to toggle article status: {e!s}",
+                    message=f"Failed to toggle article read status: {e!s}",
                     timeout=5,
                     severity="error",
                 )
@@ -1331,14 +1331,14 @@ class ttrsscli(App[None]):
         feed_id = None
         feed_title: str = ""
         is_cat = False
-        
+
         # Determine if a feed or category is selected
         if hasattr(self, "category_id") and self.category_id:
             if self.category_id.startswith("feed_"):
                 # We have a feed ID
                 feed_id = int(self.category_id.replace("feed_", ""))
                 is_cat = False
-                
+
                 # Try to get feed title
                 try:
                     feed_props = self.client.get_feed_properties(feed_id=feed_id)
@@ -1349,12 +1349,12 @@ class ttrsscli(App[None]):
                 except Exception as e:
                     logger.debug(msg=f"Error getting feed title: {e}")
                     feed_title = "this feed"
-                    
+
             elif self.category_id.startswith("cat_"):
                 # We have a category ID
                 feed_id = int(self.category_id.replace("cat_", ""))
                 is_cat = True
-                
+
                 # Try to get category title
                 try:
                     categories = self.client.get_categories()
@@ -1367,7 +1367,7 @@ class ttrsscli(App[None]):
                 except Exception as e:
                     logger.debug(msg=f"Error getting category title: {e}")
                     feed_title = "this category"
-        
+
         if not feed_id:
             self.notify(
                 message="Please select a feed or category first",
@@ -1375,7 +1375,7 @@ class ttrsscli(App[None]):
                 severity="warning",
             )
             return
-        
+
         # Show confirmation dialog
         confirm_screen = ConfirmMarkAllReadScreen(
             feed_id=feed_id,
@@ -1383,12 +1383,12 @@ class ttrsscli(App[None]):
             feed_title=feed_title
         )
         result = await self.push_screen_wait(screen=confirm_screen)
-        
+
         if result and result.get("confirm"):
             try:
                 # Mark all as read for the specific feed only
                 success = self.client.mark_all_read(feed_id=feed_id, is_cat=is_cat)
-                
+
                 if success:
                     # Refresh the UI
                     self.notify(

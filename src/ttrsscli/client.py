@@ -167,7 +167,7 @@ class TTRSSClient:
 
         # Try to get feed properties directly
         feed_props: None | Feed = self.api.get_feed_properties(feed_id=feed_id)
-        
+
         # If we got valid feed properties
         if feed_props:
             # If the feed URL is missing, try to fetch it from feed tree
@@ -175,7 +175,7 @@ class TTRSSClient:
                 try:
                     # Get the feed tree to extract URL
                     feed_tree = self.api.get_feed_tree(include_empty=True)
-                    
+
                     # Define a recursive function to search for feed URL in the tree
                     def find_feed_url(items, target_id):
                         for item in items:
@@ -186,7 +186,7 @@ class TTRSSClient:
                                 if result:
                                     return result
                         return None
-                    
+
                     # Search for the feed URL in the tree
                     if 'items' in feed_tree['content']:
                         feed_url = find_feed_url(items=feed_tree['content']['items'], target_id=feed_id)
@@ -195,10 +195,10 @@ class TTRSSClient:
                             feed_props.feed_url = feed_url  # type: ignore
                 except Exception as e:
                     logger.debug(msg=f"Error retrieving feed URL from tree: {e}")
-            
+
             # Cache the result
             self.cache[cache_key] = feed_props
-            
+
         # If direct method failed, try to find the feed in all categories
         if not feed_props:
             logger.info(msg=f"Trying to find feed {feed_id} in all feeds")
@@ -216,12 +216,12 @@ class TTRSSClient:
                 for feed in all_feeds:
                     if int(feed.id) == int(feed_id):
                         feed_props = feed
-                        
+
                         # Try to get feed URL from feed tree if not available
                         if not feed_props is None and (not hasattr(feed_props, 'feed_url') or (hasattr(feed_props, 'feed_url') and not feed_props.feed_url)): # type: ignore
                             try:
                                 feed_tree = self.api.get_feed_tree(include_empty=True)
-                                
+
                                 def find_feed_url(items, target_id):
                                     for item in items:
                                         if item.get('id') == f"FEED:{target_id}" and 'feed_url' in item:
@@ -231,14 +231,14 @@ class TTRSSClient:
                                             if result:
                                                 return result
                                     return None
-                                
+
                                 if 'items' in feed_tree['content']:
                                     feed_url = find_feed_url(items=feed_tree['content']['items'], target_id=feed_id)
                                     if feed_url:
                                         feed_props.feed_url = feed_url # type: ignore
                             except Exception as e:
                                 logger.debug(msg=f"Error retrieving feed URL from tree: {e}")
-                        
+
                         # Cache the result
                         self.cache[cache_key] = feed_props
                         break

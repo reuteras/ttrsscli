@@ -55,19 +55,19 @@ def html_to_markdown(html_content: str) -> str:
     """
     # Parse HTML
     soup = BeautifulSoup(markup=html_content, features="html.parser")
-    
+
     # Replace images with placeholders
     for img in soup.find_all(name="img"):
         if img.get("src"): # type: ignore
             # Replace with a placeholder or a note about the image
             img_text: str = f"[Image: {img.get('alt', 'No description')}]" # type: ignore
             img.replace_with(soup.new_string(s=img_text))
-    
+
     # Convert to markdown
     markdown_text: str = md_converter(
         html=str(object=soup)
     ).replace('xml encoding="UTF-8"', "")
-    
+
     # Clean the markdown
     return clean_markdown(markdown_text=markdown_text)
 

@@ -223,7 +223,7 @@ class LinkSelectionScreen(ModalScreen):
         try:
             from pathlib import Path
             from urllib.parse import urlparse
-            
+
             # Extract filename from URL
             filename: str = Path(urlparse(url=link).path).name
             if not filename:

@@ -169,7 +169,7 @@ class Configuration:
             except Exception as e:
                 print(f"Error getting version: {e}")
                 sys.exit(1)
-                
+
         # Handle create-config argument
         if args.create_config:
             self.create_default_config(args.create_config)
@@ -185,7 +185,7 @@ class Configuration:
                 logging.FileHandler(filename=args.error_log),
             ],
         )
-        
+
         self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
 
         try:
@@ -278,15 +278,15 @@ class Configuration:
 
     def create_default_config(self, config_path: str) -> None:
         """Create a default configuration file at the specified path.
-        
+
         Args:
             config_path: Path where the configuration file should be created
-            
+
         Raises:
             SystemExit: If the file cannot be written
         """
         path = Path(config_path)
-        
+
         # Create parent directories if they don't exist
         if not path.parent.exists():
             try:
@@ -295,7 +295,7 @@ class Configuration:
                 logger.error(msg=f"Error creating directory for config file: {e}")
                 print(f"Error creating directory for config file: {e}")
                 sys.exit(1)
-        
+
         # Write the default configuration
         try:
             path.write_text(DEFAULT_CONFIG)
