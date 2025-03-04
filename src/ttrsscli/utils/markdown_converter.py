@@ -106,20 +106,20 @@ def extract_links(markdown_text: str) -> list[tuple[str, str]]:
     Returns:
         List of tuples with link title and URL
     """
-    links = []
+    links: list[tuple[str, str]] = []
 
-    # Extract Markdown-style links [title](url)
-    link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
-    for match in re.finditer(pattern=link_pattern, string=markdown_text):
-        title: str = match.group(1)
-        url: str = match.group(2)
-        links.append((title, url))
+           # Extract links from article content
+    soup: BeautifulSoup = BeautifulSoup(markup=markdown_text, features="html.parser")
 
-    # Extract HTML-style links that might remain
-    html_link_pattern = r'<a\s+href="([^"]+)"[^>]*>([^<]+)</a>'
-    for match in re.finditer(pattern=html_link_pattern, string=markdown_text):
-        url = match.group(1)
-        title = match.group(2)
-        links.append((title, url))
+    for link in soup.find_all(name="a"):
+        try:
+            href: str = link.get("href", "")  # type: ignore
+            if href:
+                text: str = link.get_text().strip()
+                if not text:
+                    text = href
+                links.append((text, href))
+        except Exception as e:
+            logger.debug(msg=f"Error processing link: {e}")
 
     return links

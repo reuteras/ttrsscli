@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 import httpx
-from bs4 import BeautifulSoup
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -724,20 +723,6 @@ class ttrsscli(App[None]):
         )
         self.current_article_title: str = article.title  # type: ignore
 
-        # Extract links from article content
-        soup: BeautifulSoup = BeautifulSoup(markup=article.content, features="html.parser")  # type: ignore
-
-        for link in soup.find_all(name="a"):
-            try:
-                href: str = link.get("href", "")  # type: ignore
-                if href:
-                    text: str = link.get_text().strip()
-                    if not text:
-                        text = href
-                    self.current_article_urls.append((text, href))
-            except Exception as e:
-                logger.debug(msg=f"Error processing link: {e}")
-
         # Get article content
         self.content_markdown_original: str = render_html_to_markdown(
             html_content=article.content,  # type: ignore
@@ -746,7 +731,7 @@ class ttrsscli(App[None]):
 
         # Extract links
         self.current_article_urls = extract_links(
-            markdown_text=self.content_markdown_original
+            markdown_text=article.content  # type: ignore
         )
 
         # Add header information if enabled
@@ -758,7 +743,7 @@ class ttrsscli(App[None]):
             # Display the content using our markdown view
             content_view: Widget = self.query_one(selector="#content")
             await content_view.remove()
-            logger.debug("Removed old content view")
+            logger.debug(msg="Removed old content view")
 
             # Then create and mount a new one
             new_viewer = LinkableMarkdownViewer(
@@ -767,7 +752,7 @@ class ttrsscli(App[None]):
                 show_table_of_contents=False,
                 open_links=False
             )
-            logger.debug("Created new viewer")
+            logger.debug(msg="Created new viewer")
 
             content_container: Widget = self.query_one(selector="Vertical")
             await content_container.mount(new_viewer)
