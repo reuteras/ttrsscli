@@ -146,21 +146,45 @@ class Configuration:
             default=False,
         )
         arg_parser.add_argument(
-            "--error-log",
-            dest="error_log",
-            help="Path to error log file",
-            default="/dev/null",
+            "--error",
+            dest="error",
+            help="Enable error logging",
+            default=False,
+        )
+        arg_parser.add_argument(
+            "--log-file",
+            dest="ttrsscli_log",
+            help="Path to the log file",
+            default="ttrsscli.log",
         )
         args: argparse.Namespace = arg_parser.parse_args(args=arguments)
 
+        if not args.debug and not args.info and not args.error:
+            args.ttrsscli_log = "/dev/null"
+
+        # Set up logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[
+            logging.FileHandler(filename=args.ttrsscli_log),
+        ],
+        )
+        logger: logging.Logger = logging.getLogger(name=__name__)
+
         if args.debug:
             logger.setLevel(level=logging.DEBUG)
-            logger.debug(msg="Debug mode enabled")
+            logger.debug(msg="Debug log enabled")
 
         if args.info:
             logger.setLevel(level=logging.INFO)
-            logger.info(msg="Info mode enabled")
+            logger.info(msg="Info log enabled")
 
+        if args.error:
+            logger.setLevel(level=logging.ERROR)
+            logger.info(msg="Error log enabled")
+
+        # Handle version argument
         if args.version:
             try:
                 version: str = metadata.version(distribution_name="ttrsscli")
@@ -172,20 +196,12 @@ class Configuration:
 
         # Handle create-config argument
         if args.create_config:
-            self.create_default_config(args.create_config)
+            self.create_default_config(config_path=args.create_config)
             print(f"Created default configuration at: {args.create_config}")
             print("Please edit this file with your settings before running ttrsscli.")
             sys.exit(0)
 
-        # Set up error logging
-        logging.basicConfig(
-            level=logging.ERROR,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.FileHandler(filename=args.error_log),
-            ],
-        )
-
+        # Load the configuration file
         self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
 
         try:
@@ -298,7 +314,7 @@ class Configuration:
 
         # Write the default configuration
         try:
-            path.write_text(DEFAULT_CONFIG)
+            path.write_text(data=DEFAULT_CONFIG)
         except Exception as e:
             logger.error(msg=f"Error writing configuration file: {e}")
             print(f"Error writing configuration file: {e}")
