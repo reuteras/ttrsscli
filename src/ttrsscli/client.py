@@ -62,7 +62,11 @@ class TTRSSClient:
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        articles: list[Article] = self.api.get_articles(article_id=article_id)
+        try:
+            articles: list[Article] = self.api.get_articles(article_id=article_id)
+        except Exception as e:
+            logger.error(msg=f"Error fetching article {article_id}: {e}")
+            return []
         self.cache[cache_key] = articles
         return articles
 
@@ -73,7 +77,11 @@ class TTRSSClient:
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        categories: list[Category] = self.api.get_categories()
+        try:
+            categories: list[Category] = self.api.get_categories()
+        except Exception as e:
+            logger.error(msg=f"Error fetching categories: {e}")
+            return []
         self.cache[cache_key] = categories
         return categories
 
@@ -84,7 +92,11 @@ class TTRSSClient:
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        feeds: list[Feed] = self.api.get_feeds(cat_id=cat_id, unread_only=unread_only)
+        try:
+            feeds: list[Feed] = self.api.get_feeds(cat_id=cat_id, unread_only=unread_only)
+        except Exception as e:
+            logger.error(msg=f"Error fetching feeds for category {cat_id}: {e}")
+            return []
         self.cache[cache_key] = feeds
         return feeds
 
@@ -95,30 +107,43 @@ class TTRSSClient:
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        headlines: list[Headline] = self.api.get_headlines(
-            feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
-        )
+        try:
+            headlines: list[Headline] = self.api.get_headlines(
+                feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
+            )
+        except Exception as e:
+            logger.error(msg=f"Error fetching headlines for feed {feed_id}: {e}")
+            return []
         self.cache[cache_key] = headlines
         return headlines
 
     @handle_session_expiration
     def mark_read(self, article_id) -> None:
         """Mark article as read, retrying if session expires."""
-        self.api.mark_read(article_id=article_id)
+        try:
+            self.api.mark_read(article_id=article_id)
+        except Exception as e:
+            logger.error(msg=f"Error marking article {article_id} as read: {e}")
         # Invalidate relevant cache entries
         self._invalidate_headline_cache()
 
     @handle_session_expiration
     def mark_unread(self, article_id) -> None:
         """Mark article as unread, retrying if session expires."""
-        self.api.mark_unread(article_id=article_id)
+        try:
+            self.api.mark_unread(article_id=article_id)
+        except Exception as e:
+            logger.error(msg=f"Error marking article {article_id} as unread: {e}")
         # Invalidate relevant cache entries
         self._invalidate_headline_cache()
 
     @handle_session_expiration
     def toggle_starred(self, article_id) -> None:
         """Toggle article starred, retrying if session expires."""
-        self.api.toggle_starred(article_id=article_id)
+        try:
+            self.api.toggle_starred(article_id=article_id)
+        except Exception as e:
+            logger.error(msg=f"Error toggling starred for article {article_id}: {e}")
         # Invalidate article cache
         if f"article_{article_id}" in self.cache:
             del self.cache[f"article_{article_id}"]
@@ -126,7 +151,10 @@ class TTRSSClient:
     @handle_session_expiration
     def toggle_unread(self, article_id) -> None:
         """Toggle article read/unread, retrying if session expires."""
-        self.api.toggle_unread(article_id=article_id)
+        try:
+            self.api.toggle_unread(article_id=article_id)
+        except Exception as e:
+            logger.error(msg=f"Error toggling read/unread for article {article_id}: {e}")
         # Invalidate relevant cache entries
         if f"article_{article_id}" in self.cache:
             del self.cache[f"article_{article_id}"]
@@ -135,13 +163,17 @@ class TTRSSClient:
     @handle_session_expiration
     def subscribe_to_feed(self, feed_url, category_id=0, feed_title=None, login=None, password=None) -> Any:
         """Subscribe to a new feed."""
-        response = self.api.subscribe(
-            feed_url=feed_url,
-            category_id=category_id,
-            feed_title=feed_title,
-            login=login,
-            password=password
-        )
+        try:
+            response = self.api.subscribe(
+                feed_url=feed_url,
+                category_id=category_id,
+                feed_title=feed_title,
+                login=login,
+                password=password
+            )
+        except Exception as e:
+            logger.error(msg=f"Error subscribing to feed: {e}")
+            return None
 
         # Clear relevant cache entries
         self._invalidate_headline_cache()
@@ -151,7 +183,11 @@ class TTRSSClient:
     @handle_session_expiration
     def unsubscribe_feed(self, feed_id) -> Any:
         """Unsubscribe from a feed (delete it)."""
-        response = self.api.unsubscribe(feed_id=feed_id)
+        try:
+            response = self.api.unsubscribe(feed_id=feed_id)
+        except Exception as e:
+            logger.error(msg=f"Error unsubscribing from feed: {e}")
+            return None
 
         # Clear relevant cache entries
         self._invalidate_headline_cache()
@@ -250,12 +286,16 @@ class TTRSSClient:
     @handle_session_expiration
     def update_feed_properties(self, feed_id, title=None, category_id=None, **kwargs) -> Any:
         """Update properties for a specific feed."""
-        response = self.api.update_feed_properties(
-            feed_id=feed_id,
-            title=title,
-            category_id=category_id,
-            **kwargs
-        )
+        try:
+            response = self.api.update_feed_properties(
+                feed_id=feed_id,
+                title=title,
+                category_id=category_id,
+                **kwargs
+            )
+        except Exception as e:
+            logger.error(msg=f"Error updating feed properties for feed {feed_id}: {e}")
+            return None
 
         # Clear relevant cache entries
         if f"feed_properties_{feed_id}" in self.cache:
