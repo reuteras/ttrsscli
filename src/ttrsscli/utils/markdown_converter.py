@@ -98,21 +98,21 @@ def _clean_markdown(markdown_text: str) -> str:
 
 def escape_markdown_formatting(text: str) -> str:
     """Escape special markdown formatting characters in text.
-    
+
     Args:
         text: Text to escape
-        
+
     Returns:
         Escaped text
     """
     # Escape square brackets with dollar sign that cause Textual markup issues
     # Replace [$] with the escaped version [\$]
     text = text.replace("[$]", r"[\$]")
-    
+
     # Other potential markdown formatting to escape if needed
     # Escape other square bracket formatting that textual might interpret
     text = re.sub(pattern=r'\[([^]]*)\]', repl=r'\\[\1\\]', string=text)
-    
+
     return text
 
 def extract_links(markdown_text: str) -> list[tuple[str, str]]:
