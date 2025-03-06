@@ -27,7 +27,11 @@ from urllib3.exceptions import NameResolutionError
 from ..cache import LimitedSizeDict
 from ..client import TTRSSClient
 from ..config import Configuration
-from ..utils.markdown_converter import extract_links, render_html_to_markdown
+from ..utils.markdown_converter import (
+    escape_markdown_formatting,
+    extract_links,
+    render_html_to_markdown,
+)
 from ..utils.url import get_clean_url
 from .screens import (
     AddFeedScreen,
@@ -721,7 +725,10 @@ class ttrsscli(App[None]):
             url=article.link,  # type: ignore
             clean_url_enabled=self.clean_url
         )
-        self.current_article_title: str = article.title  # type: ignore
+        self.current_article_title: str = article.title # type: ignore
+
+        # Escape special markdown formatting in the title
+        self.current_article_title: str = escape_markdown_formatting(text=article.title) # type: ignore
 
         # Get article content
         self.content_markdown_original: str = render_html_to_markdown(
@@ -1026,8 +1033,8 @@ class ttrsscli(App[None]):
 
         header_items = []
 
-        # Add basic article info
-        header_items.append(f"> **Title:** {self.current_article_title}  ")
+        # Add basic article info - escape markdown formatting in titles
+        header_items.append(f"> **Title:** {escape_markdown_formatting(self.current_article_title)}  ")
         header_items.append(f"> **URL:** {self.current_article_url}  ")
 
         # Add article metadata if available
@@ -1042,12 +1049,15 @@ class ttrsscli(App[None]):
         ]:
             value = getattr(article, field, None)
             if value:
+                # Escape special markdown characters in values if they're strings
+                if isinstance(value, str):
+                    value = escape_markdown_formatting(value)
                 header_items.append(f"> **{label}:** {value}  ")
 
         # Add labels if available
         try:
             if hasattr(article, "labels") and article.labels:  # type: ignore
-                labels: str = ", ".join(item[1] for item in article.labels)  # type: ignore
+                labels: str = ", ".join(escape_markdown_formatting(item[1]) for item in article.labels)  # type: ignore
                 if labels:
                     header_items.append(f"> **Labels:** {labels}  ")
         except (AttributeError, TypeError):
@@ -1057,7 +1067,7 @@ class ttrsscli(App[None]):
         try:
             article_tags = self.tags.get(article.id, [])  # type: ignore
             if article_tags and len(article_tags[0]) > 0:
-                tags: str = ", ".join(article_tags)
+                tags: str = ", ".join(escape_markdown_formatting(tag) for tag in article_tags)
                 header_items.append(f"> **Tags:** {tags}  ")
         except (KeyError, IndexError, TypeError):
             pass
@@ -1132,7 +1142,7 @@ class ttrsscli(App[None]):
                         list_view.append(item=feed_title_item)
                         article_ids.append(article_id)
 
-                # Add article to list
+                # Add the article to list
                 if article.title != "":  # type: ignore
                     article_id = f"art_{article.id}"  # type: ignore
                     if article_id not in article_ids:
@@ -1149,7 +1159,8 @@ class ttrsscli(App[None]):
                                 prepend += "S" if prepend == "(" else ", S"
                             prepend += ") "
 
-                        # Format article title
+                        # Format article title - we don't need to escape here since Static widget
+                        # displays plain text, not markdown
                         article_title: str = html.unescape(
                             prepend + article.title.strip()  # type: ignore
                         )
