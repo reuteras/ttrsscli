@@ -725,10 +725,21 @@ class ttrsscli(App[None]):
             url=article.link,  # type: ignore
             clean_url_enabled=self.clean_url
         )
-        self.current_article_title: str = article.title # type: ignore
+
+        # Safely handle the article title - this is where the problem occurs
+        if hasattr(article, 'title') and article.title: # type: ignore
+            raw_title = str(article.title) # type: ignore
+            # Special handling for problematic titles with Textual markup characters
+            if raw_title.startswith("[$]"):
+                # Prefix with escape character to prevent Textual from interpreting as markup
+                self.current_article_title = "\\[$]" + raw_title[3:]
+            else:
+                self.current_article_title = raw_title
+        else:
+            self.current_article_title = "Untitled"
 
         # Escape special markdown formatting in the title
-        self.current_article_title: str = escape_markdown_formatting(text=article.title) # type: ignore
+        self.current_article_title = escape_markdown_formatting(text=self.current_article_title)
 
         # Get article content
         self.content_markdown_original: str = render_html_to_markdown(
@@ -745,9 +756,8 @@ class ttrsscli(App[None]):
         header: str = self.get_header(article=article)
         self.content_markdown = header + self.content_markdown_original
 
-        # In display_article_content method
+        # Display the content using our markdown view
         try:
-            # Display the content using our markdown view
             content_view: Widget = self.query_one(selector="#content")
             await content_view.remove()
             logger.debug(msg="Removed old content view")
@@ -772,6 +782,7 @@ class ttrsscli(App[None]):
                 timeout=5,
                 severity="error",
             )
+
         # Mark as read if auto-mark-read is enabled
         if self.configuration.auto_mark_read:
             self.client.mark_read(article_id=article_id)
@@ -1019,7 +1030,7 @@ class ttrsscli(App[None]):
         else:
             self.push_screen(screen=FullScreenTextArea(text=str(object=self.content_markdown)))
 
-    def get_header(self, article: Article) -> str:
+    def get_header(self, article: Article) -> str:  # noqa: PLR0912
         """Get header info for article.
 
         Args:
@@ -1033,8 +1044,7 @@ class ttrsscli(App[None]):
 
         header_items = []
 
-        # Add basic article info - escape markdown formatting in titles
-        header_items.append(f"> **Title:** {escape_markdown_formatting(self.current_article_title)}  ")
+        header_items.append(f"> **Title:** {self.current_article_title.replace('\\[', '[')}  ")
         header_items.append(f"> **URL:** {self.current_article_url}  ")
 
         # Add article metadata if available
@@ -1051,14 +1061,23 @@ class ttrsscli(App[None]):
             if value:
                 # Escape special markdown characters in values if they're strings
                 if isinstance(value, str):
-                    value = escape_markdown_formatting(value)
-                header_items.append(f"> **{label}:** {value}  ")
+                    safe_value = escape_markdown_formatting(value)
+                    header_items.append(f"> **{label}:** {safe_value}  ")
+                else:
+                    header_items.append(f"> **{label}:** {value}  ")
 
         # Add labels if available
         try:
             if hasattr(article, "labels") and article.labels:  # type: ignore
-                labels: str = ", ".join(escape_markdown_formatting(item[1]) for item in article.labels)  # type: ignore
-                if labels:
+                # Process each label to escape special characters
+                safe_labels = []
+                for label_tuple in article.labels:  # type: ignore
+                    if len(label_tuple) > 1:
+                        label_text = escape_markdown_formatting(label_tuple[1])
+                        safe_labels.append(label_text)
+
+                if safe_labels:
+                    labels: str = ", ".join(safe_labels)
                     header_items.append(f"> **Labels:** {labels}  ")
         except (AttributeError, TypeError):
             pass
@@ -1067,7 +1086,15 @@ class ttrsscli(App[None]):
         try:
             article_tags = self.tags.get(article.id, [])  # type: ignore
             if article_tags and len(article_tags[0]) > 0:
-                tags: str = ", ".join(escape_markdown_formatting(tag) for tag in article_tags)
+                # Process each tag to escape special characters
+                safe_tags = []
+                for tag in article_tags:
+                    safe_tag = escape_markdown_formatting(tag)
+                    # Additional protection for Textual markup
+                    safe_tag = safe_tag.replace("[", "\\[")
+                    safe_tags.append(safe_tag)
+
+                tags: str = ", ".join(safe_tags)
                 header_items.append(f"> **Tags:** {tags}  ")
         except (KeyError, IndexError, TypeError):
             pass
@@ -1162,7 +1189,7 @@ class ttrsscli(App[None]):
                         # Format article title - we don't need to escape here since Static widget
                         # displays plain text, not markdown
                         article_title: str = html.unescape(
-                            prepend + article.title.strip()  # type: ignore
+                            prepend + escape_markdown_formatting(text=article.title.strip())  # type: ignore
                         )
 
                         # Create list item

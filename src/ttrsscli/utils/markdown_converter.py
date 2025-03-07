@@ -105,13 +105,12 @@ def escape_markdown_formatting(text: str) -> str:
     Returns:
         Escaped text
     """
-    # Escape square brackets with dollar sign that cause Textual markup issues
-    # Replace [$] with the escaped version [\$]
-    text = text.replace("[$]", r"[\$]")
+    if not text:
+        return ""
 
-    # Other potential markdown formatting to escape if needed
-    # Escape other square bracket formatting that textual might interpret
-    text = re.sub(pattern=r'\[([^]]*)\]', repl=r'\\[\1\\]', string=text)
+    # Escape other square bracket formatting that Textual might interpret as markup
+    # This regex finds square brackets with content inside them
+    text = re.sub(pattern=r'\[([^\]]*)\]', repl=lambda m: f"\\[{m.group(1)}]", string=text)
 
     return text
 
