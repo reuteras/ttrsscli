@@ -40,10 +40,10 @@ class AddFeedScreen(ModalScreen):
         super().__init__()
         self.client = client
         self.category_id: int = category_id
-        self.feed_url: str  = ""
-        self.feed_name:str = ""
-        self.login_user:str = ""
-        self.login_pass:str = ""
+        self.feed_url: str = ""
+        self.feed_name: str = ""
+        self.login_user: str = ""
+        self.login_pass: str = ""
         self.categories: list[tuple[str, str]] = [("", "")]
         self.selected_category: int = category_id
         self._loading = False
@@ -78,7 +78,9 @@ class AddFeedScreen(ModalScreen):
     def on_mount(self) -> None:
         """Set initial visibility and fetch categories."""
         # Hide progress bar initially
-        progress_container: Vertical = self.query_one(selector="#progress-container", expect_type=Vertical)
+        progress_container: Vertical = self.query_one(
+            selector="#progress-container", expect_type=Vertical
+        )
         progress_container.styles.display = "none"
 
         # Fetch categories
@@ -89,11 +91,15 @@ class AddFeedScreen(ModalScreen):
         try:
             # Fetch categories for the dropdown
             categories = self.client.get_categories()
-            category_list: ListView = self.query_one(selector="#category-list", expect_type=ListView)
+            category_list: ListView = self.query_one(
+                selector="#category-list", expect_type=ListView
+            )
 
             for category in sorted(categories, key=lambda x: x.title):
                 if category.title != "Special":  # Skip special category
-                    item = ListItem(Label(renderable=category.title), id=f"cat_{category.id}")
+                    item = ListItem(
+                        Label(renderable=category.title), id=f"cat_{category.id}"
+                    )
                     category_list.append(item=item)
                     self.categories.append((category.id, category.title))
 
@@ -149,7 +155,9 @@ class AddFeedScreen(ModalScreen):
 
         try:
             # Show progress indicator
-            progress_container: Vertical = self.query_one(selector="#progress-container", expect_type=Vertical)
+            progress_container: Vertical = self.query_one(
+                selector="#progress-container", expect_type=Vertical
+            )
             progress_container.styles.display = "block"
             self._loading = True
 
@@ -187,7 +195,9 @@ class AddFeedScreen(ModalScreen):
         except Exception as e:
             # Hide progress indicator if there's an error
             if self._loading:
-                progress_container = self.query_one(selector="#progress-container", expect_type=Vertical)
+                progress_container = self.query_one(
+                    selector="#progress-container", expect_type=Vertical
+                )
                 progress_container.styles.display = "none"
                 self._loading = False
 
@@ -272,7 +282,9 @@ class EditFeedScreen(ModalScreen):
     def on_mount(self) -> None:
         """Set initial visibility of progress bar."""
         # Hide progress bar initially
-        progress_container: Vertical = self.query_one(selector="#progress-container", expect_type=Vertical)
+        progress_container: Vertical = self.query_one(
+            selector="#progress-container", expect_type=Vertical
+        )
         progress_container.styles.display = "none"
 
     async def on_show(self) -> None:  # noqa: PLR0912, PLR0915
@@ -280,32 +292,49 @@ class EditFeedScreen(ModalScreen):
         try:
             # Show progress indicator
             self._loading = True
-            progress_container: Vertical = self.query_one(selector="#progress-container", expect_type=Vertical)
+            progress_container: Vertical = self.query_one(
+                selector="#progress-container", expect_type=Vertical
+            )
             progress_container.styles.display = "block"
 
             # Fetch categories for the dropdown
             categories = self.client.get_categories()
-            category_list: ListView = self.query_one(selector="#category-list", expect_type=ListView)
+            category_list: ListView = self.query_one(
+                selector="#category-list", expect_type=ListView
+            )
 
             for category in sorted(categories, key=lambda x: x.title):
                 if category.title != "Special":  # Skip special category
-                    item = ListItem(Label(renderable=category.title), id=f"cat_{category.id}")
+                    item = ListItem(
+                        Label(renderable=category.title), id=f"cat_{category.id}"
+                    )
                     category_list.append(item=item)
-                    self.categories.append((category.id, category.title)) # type: ignore
+                    self.categories.append((category.id, category.title))  # type: ignore
 
             # Fetch feed details using get_feed_properties with additional error handling
             try:
-                self.feed_details = self.client.get_feed_properties(feed_id=self.feed_id)
+                self.feed_details = self.client.get_feed_properties(
+                    feed_id=self.feed_id
+                )
 
                 # Update feed URL if available in feed_details
                 if self.feed_details:
                     # Update the URL field if feed_url is available
-                    if hasattr(self.feed_details, "feed_url") and self.feed_details.feed_url:
+                    if (
+                        hasattr(self.feed_details, "feed_url")
+                        and self.feed_details.feed_url
+                    ):
                         self.current_url = self.feed_details.feed_url
-                        url_input: Input = self.query_one(selector="#feed-url-input", expect_type=Input)
+                        url_input: Input = self.query_one(
+                            selector="#feed-url-input", expect_type=Input
+                        )
                         url_input.value = self.current_url
-                    elif self.current_url:  # Use the URL provided during initialization if available
-                        url_input = self.query_one(selector="#feed-url-input", expect_type=Input)
+                    elif (
+                        self.current_url
+                    ):  # Use the URL provided during initialization if available
+                        url_input = self.query_one(
+                            selector="#feed-url-input", expect_type=Input
+                        )
                         url_input.value = self.current_url
                     else:
                         # Notify that URL couldn't be retrieved
@@ -313,7 +342,8 @@ class EditFeedScreen(ModalScreen):
                             title="Warning",
                             message="Could not retrieve feed URL. This field will be display-only.",
                             severity="warning",
-                            timeout=5)
+                            timeout=5,
+                        )
 
                 if not self.feed_details:
                     # If get_feed_properties returns None, try to get feed info from all feeds
@@ -321,10 +351,14 @@ class EditFeedScreen(ModalScreen):
                     all_feeds = []
                     for category in categories:
                         try:
-                            feeds = self.client.get_feeds(cat_id=category.id, unread_only=False)
+                            feeds = self.client.get_feeds(
+                                cat_id=category.id, unread_only=False
+                            )
                             all_feeds.extend(feeds)
                         except Exception as feed_err:
-                            logger.warning(msg=f"Error getting feeds for category {category.id}: {feed_err}")
+                            logger.warning(
+                                msg=f"Error getting feeds for category {category.id}: {feed_err}"
+                            )
 
                     # Find the feed in all_feeds
                     for feed in all_feeds:
@@ -333,7 +367,9 @@ class EditFeedScreen(ModalScreen):
                             # Check for feed URL
                             if hasattr(feed, "feed_url") and feed.feed_url:
                                 self.current_url = feed.feed_url
-                                url_input = self.query_one(selector="#feed-url-input", expect_type=Input)
+                                url_input = self.query_one(
+                                    selector="#feed-url-input", expect_type=Input
+                                )
                                 url_input.value = self.current_url
                             break
             except Exception as feed_error:
@@ -342,29 +378,35 @@ class EditFeedScreen(ModalScreen):
                     title="Warning",
                     message="Could not fetch complete feed details. Some settings may not be available.",
                     severity="warning",
-                    timeout=5
+                    timeout=5,
                 )
                 # Create minimal feed details with the information we have
-                self.feed_details = type('obj', (object,), {
-                    'title': self.current_title,
-                    'cat_id': 0,  # Default to uncategorized
-                    'update_enabled': True,
-                    'include_in_digest': True,
-                    'always_display_attachments': False,
-                    'mark_unread_on_update': False
-                })
+                self.feed_details = type(
+                    "obj",
+                    (object,),
+                    {
+                        "title": self.current_title,
+                        "cat_id": 0,  # Default to uncategorized
+                        "update_enabled": True,
+                        "include_in_digest": True,
+                        "always_display_attachments": False,
+                        "mark_unread_on_update": False,
+                    },
+                )
 
             if self.feed_details:
                 # Update feed values from details
                 if hasattr(self.feed_details, "title"):
-                    self.current_title = self.feed_details.title # type: ignore
-                    self.feed_title = self.feed_details.title # type: ignore
-                    title_input: Input = self.query_one(selector="#feed-title-input", expect_type=Input)
+                    self.current_title = self.feed_details.title  # type: ignore
+                    self.feed_title = self.feed_details.title  # type: ignore
+                    title_input: Input = self.query_one(
+                        selector="#feed-title-input", expect_type=Input
+                    )
                     title_input.value = self.current_title
 
                 # Get current category
                 if hasattr(self.feed_details, "cat_id"):
-                    self.current_category_id = self.feed_details.cat_id # type: ignore
+                    self.current_category_id = self.feed_details.cat_id  # type: ignore
 
                     # Select the current category in the list
                     for i, (cat_id, _) in enumerate(self.categories):
@@ -408,7 +450,9 @@ class EditFeedScreen(ModalScreen):
                     # Create a horizontal container for each setting with its checkbox and label
                     container = Horizontal(id=f"setting-{setting_id}")
                     # Add the checkbox and label as its children in the constructor
-                    container.compose_add_child(Checkbox(value=value, id=f"checkbox-{setting_id}"))
+                    container.compose_add_child(
+                        Checkbox(value=value, id=f"checkbox-{setting_id}")
+                    )
                     container.compose_add_child(Label(label_text))
                     # Add to our list of widgets to mount
                     setting_widgets.append(container)

@@ -30,7 +30,6 @@ class LinkableMarkdownViewer(MarkdownViewer):
         """
         super().__init__(**kwargs)
 
-
     @on(message_type=Markdown.LinkClicked)
     def handle_link(self, event: Markdown.LinkClicked) -> None:
         """Open links in the default web browser.

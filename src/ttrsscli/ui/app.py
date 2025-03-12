@@ -114,37 +114,15 @@ class ttrsscli(App[None]):
         """Connect to Tiny Tiny RSS and initialize the app."""
         super().__init__()  # Initialize first for early access to notify/etc.
 
-        try:
-            # Load the configuration via the Configuration class sending it command line arguments
-            self.configuration = Configuration(arguments=sys.argv[1:])
+        # Load the configuration via the Configuration class sending it command line arguments
+        self.configuration = Configuration(arguments=sys.argv[1:])
 
-            # Set theme based on configuration
-            self.theme = (
-                "textual-dark"
-                if self.configuration.default_theme == "dark"
-                else "textual-light"
-            )
-
-            # Try to connect to TT-RSS
-            self.client = TTRSSClient(
-                url=self.configuration.api_url,
-                username=self.configuration.username,
-                password=self.configuration.password,
-            )
-        except TTRNotLoggedIn:
-            logger.error(
-                msg="Could not log in to Tiny Tiny RSS. Check your credentials."
-            )
-            print("Error: Could not log in to Tiny Tiny RSS. Check your credentials.")
-            sys.exit(1)
-        except NameResolutionError:
-            logger.error(msg="Couldn't look up server for url.")
-            print("Error: Couldn't look up server for url.")
-            sys.exit(1)
-        except Exception as e:
-            logger.error(msg=f"Unexpected error: {e}")
-            print(f"Error: {e}")
-            sys.exit(1)
+        # Set theme based on configuration
+        self.theme = (
+            "textual-dark"
+            if self.configuration.default_theme == "dark"
+            else "textual-light"
+        )
 
         self.START_TEXT: str = (
             "# Welcome to ttrsscli!\n\n"
@@ -188,8 +166,45 @@ class ttrsscli(App[None]):
             yield ListView(id="categories")
             with Vertical():
                 yield ListView(id="articles")
-                yield LinkableMarkdownViewer(markdown=self.START_TEXT, id="content", show_table_of_contents=False, open_links=False)
+                yield LinkableMarkdownViewer(
+                    markdown=self.START_TEXT,
+                    id="content",
+                    show_table_of_contents=False,
+                    open_links=False,
+                )
         yield Footer()
+
+    async def on_ready(self) -> None:
+        """Connect to the Tiny Tiny RSS server and refresh data."""
+        await self.connect()
+
+    async def connect(self) -> None:
+        """Connect to the Tiny Tiny RSS server and refresh data."""
+        try:
+            # Try to connect to TT-RSS
+            self.client = TTRSSClient(
+                url=self.configuration.api_url,
+                username=self.configuration.username,
+                password=self.configuration.password,
+            )
+            await self.refresh_categories()
+            await self.refresh_articles()
+        except NameResolutionError as e:
+            logger.error(msg=f"Error connecting to Tiny Tiny RSS: {e}")
+            self.notify(
+                title="Connection Error",
+                message=f"Error connecting to Tiny Tiny RSS: {e!s}",
+                timeout=5,
+                severity="error",
+            )
+        except TTRNotLoggedIn as e:
+            logger.error(msg=f"Error logging in to Tiny Tiny RSS: {e}")
+            self.notify(
+                title="Login Error",
+                message=f"Error logging in to Tiny Tiny RSS: {e!s}",
+                timeout=5,
+                severity="error",
+            )
 
     async def on_list_view_highlighted(self, message: Message) -> None:
         """Called when an item is highlighted in the ListViews."""
@@ -288,11 +303,6 @@ class ttrsscli(App[None]):
             logger.error(msg=f"Error handling list view selection: {err}")
             self.notify(message=f"Error: {err}", title="Error", severity="error")
 
-    async def on_mount(self) -> None:
-        """Fetch and display categories on startup."""
-        await self.refresh_categories()
-        await self.refresh_articles()
-
     @work
     async def action_add_feed(self) -> None:
         """Open screen to add a new feed."""
@@ -342,7 +352,8 @@ class ttrsscli(App[None]):
             # Try to get feed details
             for category in self.client.get_categories():
                 for feed in self.client.get_feeds(
-                    cat_id=category.id, unread_only=False  # type: ignore
+                    cat_id=category.id,
+                    unread_only=False,  # type: ignore
                 ):
                     if feed.id == feed_id:  # type: ignore
                         feed_title = feed.title  # type: ignore
@@ -472,7 +483,7 @@ class ttrsscli(App[None]):
             markdown=self.content_markdown,
             id="content",
             show_table_of_contents=False,
-            open_links=False
+            open_links=False,
         )
         content_container: Widget = self.query_one(selector="Vertical")
         await content_container.mount(new_viewer)
@@ -547,6 +558,7 @@ class ttrsscli(App[None]):
 
         # Encode title and content for URL format
         from urllib.parse import quote
+
         encoded_title: str = quote(string=title).replace("/", "%2F")
         encoded_content: str = quote(string=content)
 
@@ -572,6 +584,7 @@ class ttrsscli(App[None]):
 
                 # Wait a moment for Obsidian to open
                 from time import sleep
+
                 sleep(1)
 
                 # Now tell the user to manually import the file
@@ -586,9 +599,11 @@ class ttrsscli(App[None]):
                     os.startfile(temp_path)
                 elif sys.platform == "darwin":
                     import subprocess
+
                     subprocess.call(args=["open", str(object=temp_path)])
                 else:  # Linux and other Unix-like
                     import subprocess
+
                     subprocess.call(["xdg-open", str(temp_path)])
 
             except Exception as e:
@@ -723,12 +738,12 @@ class ttrsscli(App[None]):
         # Get clean URL and title
         self.current_article_url: str = get_clean_url(
             url=article.link,  # type: ignore
-            clean_url_enabled=self.clean_url
+            clean_url_enabled=self.clean_url,
         )
 
         # Safely handle the article title - this is where the problem occurs
-        if hasattr(article, 'title') and article.title: # type: ignore
-            raw_title = str(article.title) # type: ignore
+        if hasattr(article, "title") and article.title:  # type: ignore
+            raw_title = str(article.title)  # type: ignore
             # Special handling for problematic titles with Textual markup characters
             if raw_title.startswith("[$]"):
                 # Prefix with escape character to prevent Textual from interpreting as markup
@@ -739,12 +754,14 @@ class ttrsscli(App[None]):
             self.current_article_title = "Untitled"
 
         # Escape special markdown formatting in the title
-        self.current_article_title = escape_markdown_formatting(text=self.current_article_title)
+        self.current_article_title = escape_markdown_formatting(
+            text=self.current_article_title
+        )
 
         # Get article content
         self.content_markdown_original: str = render_html_to_markdown(
             html_content=article.content,  # type: ignore
-            clean_urls=self.clean_url
+            clean_urls=self.clean_url,
         )
 
         # Extract links
@@ -767,7 +784,7 @@ class ttrsscli(App[None]):
                 markdown=self.content_markdown,
                 id="content",
                 show_table_of_contents=False,
-                open_links=False
+                open_links=False,
             )
             logger.debug(msg="Created new viewer")
 
@@ -1028,7 +1045,9 @@ class ttrsscli(App[None]):
         if isinstance(self.screen, FullScreenTextArea):
             self.pop_screen()
         else:
-            self.push_screen(screen=FullScreenTextArea(text=str(object=self.content_markdown)))
+            self.push_screen(
+                screen=FullScreenTextArea(text=str(object=self.content_markdown))
+            )
 
     def get_header(self, article: Article) -> str:  # noqa: PLR0912
         """Get header info for article.
@@ -1044,7 +1063,9 @@ class ttrsscli(App[None]):
 
         header_items = []
 
-        header_items.append(f"> **Title:** {self.current_article_title.replace('\\[', '[')}  ")
+        header_items.append(
+            f"> **Title:** {self.current_article_title.replace('\\[', '[')}  "
+        )
         header_items.append(f"> **URL:** {self.current_article_url}  ")
 
         # Add article metadata if available
@@ -1189,7 +1210,8 @@ class ttrsscli(App[None]):
                         # Format article title - we don't need to escape here since Static widget
                         # displays plain text, not markdown
                         article_title: str = html.unescape(
-                            prepend + escape_markdown_formatting(text=article.title.strip())  # type: ignore
+                            prepend
+                            + escape_markdown_formatting(text=article.title.strip())  # type: ignore
                         )
 
                         # Create list item
@@ -1237,7 +1259,8 @@ class ttrsscli(App[None]):
             if categories:
                 # Sort categories by title
                 sorted_categories = sorted(
-                    categories, key=lambda x: x.title  # type: ignore
+                    categories,
+                    key=lambda x: x.title,  # type: ignore
                 )  # type: ignore
 
                 for category in sorted_categories:
@@ -1382,8 +1405,8 @@ class ttrsscli(App[None]):
                 try:
                     categories = self.client.get_categories()
                     for category in categories:
-                        if int(category.id) == feed_id: # type: ignore
-                            feed_title = category.title # type: ignore
+                        if int(category.id) == feed_id:  # type: ignore
+                            feed_title = category.title  # type: ignore
                             break
                     if not feed_title:
                         feed_title = "this category"
@@ -1401,9 +1424,7 @@ class ttrsscli(App[None]):
 
         # Show confirmation dialog
         confirm_screen = ConfirmMarkAllReadScreen(
-            feed_id=feed_id,
-            is_cat=is_cat,
-            feed_title=feed_title
+            feed_id=feed_id, is_cat=is_cat, feed_title=feed_title
         )
         result = await self.push_screen_wait(screen=confirm_screen)
 
@@ -1416,7 +1437,7 @@ class ttrsscli(App[None]):
                     # Refresh the UI
                     self.notify(
                         message=f"Marked all articles in '{feed_title}' as read",
-                        title="Success"
+                        title="Success",
                     )
                     await self.refresh_categories()
                     await self.refresh_articles(show_id=self.category_id)
@@ -1427,5 +1448,5 @@ class ttrsscli(App[None]):
                 self.notify(
                     message=f"Error marking all as read: {e}",
                     title="Error",
-                    severity="error"
+                    severity="error",
                 )

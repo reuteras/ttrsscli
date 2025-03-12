@@ -36,17 +36,19 @@ class TTRSSClient:
                 url=self.url,
                 user=self.username,
                 password=self.password,
-                auto_login=False
+                auto_login=False,
             )
 
             # Get a new session ID
             self.api.login()
 
             # Verify login status to make sure it worked
-            if hasattr(self.api, 'logged_in') and callable(self.api.logged_in):
+            if hasattr(self.api, "logged_in") and callable(self.api.logged_in):
                 is_logged_in: bool = self.api.logged_in()
                 if not is_logged_in:
-                    logger.warning(msg="Login appeared successful but session is not valid.")
+                    logger.warning(
+                        msg="Login appeared successful but session is not valid."
+                    )
                     return False
 
             logger.info(msg="Successfully authenticated with TTRSS")
@@ -93,7 +95,9 @@ class TTRSSClient:
             return self.cache[cache_key]
 
         try:
-            feeds: list[Feed] = self.api.get_feeds(cat_id=cat_id, unread_only=unread_only)
+            feeds: list[Feed] = self.api.get_feeds(
+                cat_id=cat_id, unread_only=unread_only
+            )
         except Exception as e:
             logger.error(msg=f"Error fetching feeds for category {cat_id}: {e}")
             return []
@@ -154,14 +158,18 @@ class TTRSSClient:
         try:
             self.api.toggle_unread(article_id=article_id)
         except Exception as e:
-            logger.error(msg=f"Error toggling read/unread for article {article_id}: {e}")
+            logger.error(
+                msg=f"Error toggling read/unread for article {article_id}: {e}"
+            )
         # Invalidate relevant cache entries
         if f"article_{article_id}" in self.cache:
             del self.cache[f"article_{article_id}"]
         self._invalidate_headline_cache()
 
     @handle_session_expiration
-    def subscribe_to_feed(self, feed_url, category_id=0, feed_title=None, login=None, password=None) -> Any:
+    def subscribe_to_feed(
+        self, feed_url, category_id=0, feed_title=None, login=None, password=None
+    ) -> Any:
         """Subscribe to a new feed."""
         try:
             response = self.api.subscribe(
@@ -169,7 +177,7 @@ class TTRSSClient:
                 category_id=category_id,
                 feed_title=feed_title,
                 login=login,
-                password=password
+                password=password,
             )
         except Exception as e:
             logger.error(msg=f"Error subscribing to feed: {e}")
@@ -207,7 +215,7 @@ class TTRSSClient:
         # If we got valid feed properties
         if feed_props:
             # If the feed URL is missing, try to fetch it from feed tree
-            if not hasattr(feed_props, 'feed_url') or not feed_props.feed_url:  # type: ignore
+            if not hasattr(feed_props, "feed_url") or not feed_props.feed_url:  # type: ignore
                 try:
                     # Get the feed tree to extract URL
                     feed_tree = self.api.get_feed_tree(include_empty=True)
@@ -215,17 +223,24 @@ class TTRSSClient:
                     # Define a recursive function to search for feed URL in the tree
                     def find_feed_url(items, target_id):
                         for item in items:
-                            if item.get('id') == f"FEED:{target_id}" and 'feed_url' in item:
-                                return item['feed_url']
-                            if 'items' in item:
-                                result = find_feed_url(items=item['items'], target_id=target_id)
+                            if (
+                                item.get("id") == f"FEED:{target_id}"
+                                and "feed_url" in item
+                            ):
+                                return item["feed_url"]
+                            if "items" in item:
+                                result = find_feed_url(
+                                    items=item["items"], target_id=target_id
+                                )
                                 if result:
                                     return result
                         return None
 
                     # Search for the feed URL in the tree
-                    if 'items' in feed_tree['content']:
-                        feed_url = find_feed_url(items=feed_tree['content']['items'], target_id=feed_id)
+                    if "items" in feed_tree["content"]:
+                        feed_url = find_feed_url(
+                            items=feed_tree["content"]["items"], target_id=feed_id
+                        )
                         if feed_url:
                             # Add the feed_url attribute to feed_props
                             feed_props.feed_url = feed_url  # type: ignore
@@ -243,10 +258,14 @@ class TTRSSClient:
                 categories: list[Category] = self.get_categories()
                 for category in categories:
                     try:
-                        feeds: list[Feed] = self.get_feeds(cat_id=category.id, unread_only=False) # type: ignore
+                        feeds: list[Feed] = self.get_feeds(
+                            cat_id=category.id, unread_only=False
+                        )  # type: ignore
                         all_feeds.extend(feeds)
                     except Exception as feed_err:
-                        logger.warning(msg=f"Error getting feeds for category {category.id}: {feed_err}") # type: ignore
+                        logger.warning(
+                            msg=f"Error getting feeds for category {category.id}: {feed_err}"
+                        )  # type: ignore
 
                 # Find the feed in all_feeds
                 for feed in all_feeds:
@@ -254,26 +273,42 @@ class TTRSSClient:
                         feed_props = feed
 
                         # Try to get feed URL from feed tree if not available
-                        if not feed_props is None and (not hasattr(feed_props, 'feed_url') or (hasattr(feed_props, 'feed_url') and not feed_props.feed_url)): # type: ignore
+                        if not feed_props is None and (
+                            not hasattr(feed_props, "feed_url")
+                            or (
+                                hasattr(feed_props, "feed_url")
+                                and not feed_props.feed_url
+                            )
+                        ):  # type: ignore
                             try:
                                 feed_tree = self.api.get_feed_tree(include_empty=True)
 
                                 def find_feed_url(items, target_id):
                                     for item in items:
-                                        if item.get('id') == f"FEED:{target_id}" and 'feed_url' in item:
-                                            return item['feed_url']
-                                        if 'items' in item:
-                                            result = find_feed_url(items=item['items'], target_id=target_id)
+                                        if (
+                                            item.get("id") == f"FEED:{target_id}"
+                                            and "feed_url" in item
+                                        ):
+                                            return item["feed_url"]
+                                        if "items" in item:
+                                            result = find_feed_url(
+                                                items=item["items"], target_id=target_id
+                                            )
                                             if result:
                                                 return result
                                     return None
 
-                                if 'items' in feed_tree['content']:
-                                    feed_url = find_feed_url(items=feed_tree['content']['items'], target_id=feed_id)
+                                if "items" in feed_tree["content"]:
+                                    feed_url = find_feed_url(
+                                        items=feed_tree["content"]["items"],
+                                        target_id=feed_id,
+                                    )
                                     if feed_url:
-                                        feed_props.feed_url = feed_url # type: ignore
+                                        feed_props.feed_url = feed_url  # type: ignore
                             except Exception as e:
-                                logger.debug(msg=f"Error retrieving feed URL from tree: {e}")
+                                logger.debug(
+                                    msg=f"Error retrieving feed URL from tree: {e}"
+                                )
 
                         # Cache the result
                         self.cache[cache_key] = feed_props
@@ -284,14 +319,13 @@ class TTRSSClient:
         return feed_props
 
     @handle_session_expiration
-    def update_feed_properties(self, feed_id, title=None, category_id=None, **kwargs) -> Any:
+    def update_feed_properties(
+        self, feed_id, title=None, category_id=None, **kwargs
+    ) -> Any:
         """Update properties for a specific feed."""
         try:
             response = self.api.update_feed_properties(
-                feed_id=feed_id,
-                title=title,
-                category_id=category_id,
-                **kwargs
+                feed_id=feed_id, title=title, category_id=category_id, **kwargs
             )
         except Exception as e:
             logger.error(msg=f"Error updating feed properties for feed {feed_id}: {e}")
@@ -319,7 +353,9 @@ class TTRSSClient:
 
     def _invalidate_headline_cache(self) -> None:
         """Invalidate all headline cache entries."""
-        keys_to_remove: list[str] = [k for k in self.cache if k.startswith("headlines_")]
+        keys_to_remove: list[str] = [
+            k for k in self.cache if k.startswith("headlines_")
+        ]
         for key in keys_to_remove:
             del self.cache[key]
 

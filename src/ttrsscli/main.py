@@ -10,6 +10,7 @@ from ttrsscli.ui.app import ttrsscli
 # Create the application instance
 app = ttrsscli()
 
+
 def main() -> None:
     """Run the ttrsscli app.
 

@@ -60,6 +60,7 @@ Last changed: `$= dv.current().file.mtime`
 \"\"\"
 """
 
+
 def get_conf_value(op_command: str) -> str:
     """Get the configuration value from 1Password if config starts with 'op '.
 
@@ -167,8 +168,8 @@ class Configuration:
             level=logging.INFO,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             handlers=[
-            logging.FileHandler(filename=args.ttrsscli_log),
-        ],
+                logging.FileHandler(filename=args.ttrsscli_log),
+            ],
         )
         logger: logging.Logger = logging.getLogger(name=__name__)
 
@@ -281,9 +282,13 @@ class Configuration:
         try:
             if not config_path.exists():
                 # If config file doesn't exist, create it from the default config
-                print(f"Config file {config_file} not found. Creating with default settings.")
+                print(
+                    f"Config file {config_file} not found. Creating with default settings."
+                )
                 config_path.write_text(data=DEFAULT_CONFIG)
-                print(f"Created {config_file} with default settings. Please edit it with your settings.")
+                print(
+                    f"Created {config_file} with default settings. Please edit it with your settings."
+                )
                 sys.exit(1)
 
             return toml.loads(s=config_path.read_text())

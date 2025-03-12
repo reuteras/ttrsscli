@@ -67,9 +67,7 @@ class ConfirmMarkAllReadScreen(ModalScreen):
         ("enter", "confirm", "Confirm"),
     ]
 
-    def __init__(
-        self, feed_id, is_cat=False, feed_title="this feed"
-    ) -> None:
+    def __init__(self, feed_id, is_cat=False, feed_title="this feed") -> None:
         """Initialize the confirmation screen.
 
         Args:
@@ -88,7 +86,7 @@ class ConfirmMarkAllReadScreen(ModalScreen):
             yield Label(renderable="Mark All As Read", id="confirm-title")
             yield Label(
                 renderable=f"Mark all articles in '{self.feed_title}' as read?",
-                id="confirm-message"
+                id="confirm-message",
             )
             with Horizontal(id="confirm-buttons"):
                 yield Button(label="Yes", id="confirm-button", variant="error")
@@ -103,7 +101,9 @@ class ConfirmMarkAllReadScreen(ModalScreen):
 
     def action_confirm(self) -> None:
         """Confirm the action and mark all articles as read."""
-        self.dismiss(result={"confirm": True, "feed_id": self.feed_id, "is_cat": self.is_cat})
+        self.dismiss(
+            result={"confirm": True, "feed_id": self.feed_id, "is_cat": self.is_cat}
+        )
 
     def action_cancel(self) -> None:
         """Cancel the action."""

@@ -9,6 +9,7 @@ from markdownify import markdownify as md_converter
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
+
 def clean_markdown(markdown_text: str) -> str:
     """Clean up markdown text for better readability.
 
@@ -44,6 +45,7 @@ def clean_markdown(markdown_text: str) -> str:
 
     return "\n  ".join(wrapped_lines)
 
+
 def html_to_markdown(html_content: str) -> str:
     """Convert HTML to markdown.
 
@@ -58,18 +60,19 @@ def html_to_markdown(html_content: str) -> str:
 
     # Replace images with placeholders
     for img in soup.find_all(name="img"):
-        if img.get("src"): # type: ignore
+        if img.get("src"):  # type: ignore
             # Replace with a placeholder or a note about the image
-            img_text: str = f"[Image: {img.get('alt', 'No description')}]" # type: ignore
+            img_text: str = f"[Image: {img.get('alt', 'No description')}]"  # type: ignore
             img.replace_with(soup.new_string(s=img_text))
 
     # Convert to markdown
-    markdown_text: str = md_converter(
-        html=str(object=soup)
-    ).replace('xml encoding="UTF-8"', "")
+    markdown_text: str = md_converter(html=str(object=soup)).replace(
+        'xml encoding="UTF-8"', ""
+    )
 
     # Clean the markdown
     return clean_markdown(markdown_text=markdown_text)
+
 
 def extract_links_from_html(soup: BeautifulSoup) -> list[tuple[str, str]]:
     """Extract URLs from article content.
@@ -86,7 +89,7 @@ def extract_links_from_html(soup: BeautifulSoup) -> list[tuple[str, str]]:
 
     for a in soup.find_all(name="a"):
         try:
-            href: str = a.get("href", "") # type: ignore
+            href: str = a.get("href", "")  # type: ignore
             if href:
                 text: str = a.get_text().strip()
                 if not text:  # If link text is empty

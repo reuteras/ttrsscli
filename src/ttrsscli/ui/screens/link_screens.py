@@ -183,6 +183,7 @@ class LinkSelectionScreen(ModalScreen):
         """
         if self.open_links == "browser":
             import webbrowser
+
             webbrowser.open(url=link)
             self.notify(title="Opening", message="Opening link in browser", timeout=3)
         elif self.open_links == "download":
@@ -288,6 +289,7 @@ class LinkSelectionScreen(ModalScreen):
                 )
                 if self.open:
                     import webbrowser
+
                     webbrowser.open(url=response[1].url)
             else:
                 self.notify(
@@ -298,7 +300,7 @@ class LinkSelectionScreen(ModalScreen):
                 )
         except Exception as err:
             # Make sure to remove progress screen if there's an error
-            if isinstance(self.screen, "ProgressScreen"): # type: ignore
+            if isinstance(self.screen, "ProgressScreen"):  # type: ignore
                 self.app.pop_screen()
 
             logger.error(msg=f"Error saving to Readwise: {err}")

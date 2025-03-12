@@ -78,23 +78,41 @@ def _clean_markdown(markdown_text: str) -> str:
     markdown_text = re.sub(pattern=r"\n{3,}", repl="\n\n", string=markdown_text)
 
     # Fix code blocks that might have been malformed
-    markdown_text = re.sub(pattern=r'```\s+([a-zA-Z0-9]+)\s*\n', repl=r'```\1\n', string=markdown_text)
+    markdown_text = re.sub(
+        pattern=r"```\s+([a-zA-Z0-9]+)\s*\n", repl=r"```\1\n", string=markdown_text
+    )
 
     # Ensure there are blank lines before and after headings, lists, code blocks
-    markdown_text = re.sub(pattern=r'([^\n])\n(#{1,6} )', repl=r'\1\n\n\2', string=markdown_text)
-    markdown_text = re.sub(pattern=r'(#{1,6} .*)\n([^\n])', repl=r'\1\n\n\2', string=markdown_text)
+    markdown_text = re.sub(
+        pattern=r"([^\n])\n(#{1,6} )", repl=r"\1\n\n\2", string=markdown_text
+    )
+    markdown_text = re.sub(
+        pattern=r"(#{1,6} .*)\n([^\n])", repl=r"\1\n\n\2", string=markdown_text
+    )
 
     # Ensure proper spacing around lists
-    markdown_text = re.sub(pattern=r'([^\n])\n(- |\* |[0-9]+\. )', repl=r'\1\n\n\2', string=markdown_text)
+    markdown_text = re.sub(
+        pattern=r"([^\n])\n(- |\* |[0-9]+\. )", repl=r"\1\n\n\2", string=markdown_text
+    )
 
     # Ensure proper spacing around code blocks
-    markdown_text = re.sub(pattern=r'([^\n])\n```', repl=r'\1\n\n```', string=markdown_text)
-    markdown_text = re.sub(pattern=r'```\n([^\n])', repl=r'```\n\n\1', string=markdown_text)
+    markdown_text = re.sub(
+        pattern=r"([^\n])\n```", repl=r"\1\n\n```", string=markdown_text
+    )
+    markdown_text = re.sub(
+        pattern=r"```\n([^\n])", repl=r"```\n\n\1", string=markdown_text
+    )
 
     # Remove some xmlns attributes that might be present
-    markdown_text = re.sub(pattern=r'xml encoding="UTF-8"', repl="", string=markdown_text, flags=re.IGNORECASE)
+    markdown_text = re.sub(
+        pattern=r'xml encoding="UTF-8"',
+        repl="",
+        string=markdown_text,
+        flags=re.IGNORECASE,
+    )
 
     return markdown_text
+
 
 def escape_markdown_formatting(text: str) -> str:
     """Escape special markdown formatting characters in text.
@@ -110,9 +128,12 @@ def escape_markdown_formatting(text: str) -> str:
 
     # Escape other square bracket formatting that Textual might interpret as markup
     # This regex finds square brackets with content inside them
-    text = re.sub(pattern=r'\[([^\]]*)\]', repl=lambda m: f"\\[{m.group(1)}]", string=text)
+    text = re.sub(
+        pattern=r"\[([^\]]*)\]", repl=lambda m: f"\\[{m.group(1)}]", string=text
+    )
 
     return text
+
 
 def extract_links(markdown_text: str) -> list[tuple[str, str]]:
     """Extract links from markdown text.
@@ -125,7 +146,7 @@ def extract_links(markdown_text: str) -> list[tuple[str, str]]:
     """
     links: list[tuple[str, str]] = []
 
-           # Extract links from article content
+    # Extract links from article content
     soup: BeautifulSoup = BeautifulSoup(markup=markdown_text, features="html.parser")
 
     for link in soup.find_all(name="a"):

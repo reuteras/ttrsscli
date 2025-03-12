@@ -8,6 +8,7 @@ from typing import Any
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
+
 def handle_session_expiration(api_method: Callable) -> Callable:
     """Decorator that retries a function call after re-authenticating if session expires.
 

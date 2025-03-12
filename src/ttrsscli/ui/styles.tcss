@@ -165,3 +165,10 @@ LinkSelectionScreen ListView {
     padding: 1 2;
     margin: 1 2;
 }
+
+Markdown {
+    /* Set a max-width in columns (characters) */
+    max-width: 120;
+    /* This ensures content wraps at the max-width */
+    overflow-x: hidden;
+}

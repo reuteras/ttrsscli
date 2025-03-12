@@ -28,7 +28,7 @@ class FullScreenMarkdown(Screen):
         yield LinkableMarkdownViewer(
             markdown=self.markdown_content,
             show_table_of_contents=False,
-            open_links=False
+            open_links=False,
         )
 
     def on_key(self, event) -> None:
