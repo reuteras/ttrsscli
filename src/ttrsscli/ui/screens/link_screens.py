@@ -1,4 +1,4 @@
-"""Link selection screen for ttrsscli."""
+"""Link selection screen."""
 
 import logging
 import os
