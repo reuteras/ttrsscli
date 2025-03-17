@@ -259,13 +259,13 @@ class TTRSSClient:
                 for category in categories:
                     try:
                         feeds: list[Feed] = self.get_feeds(
-                            cat_id=category.id, unread_only=False
-                        )  # type: ignore
+                            cat_id=category.id, unread_only=False  # type: ignore
+                        )
                         all_feeds.extend(feeds)
                     except Exception as feed_err:
                         logger.warning(
-                            msg=f"Error getting feeds for category {category.id}: {feed_err}"
-                        )  # type: ignore
+                            msg=f"Error getting feeds for category {category.id}: {feed_err}"  # type: ignore
+                        )
 
                 # Find the feed in all_feeds
                 for feed in all_feeds:
@@ -277,9 +277,9 @@ class TTRSSClient:
                             not hasattr(feed_props, "feed_url")
                             or (
                                 hasattr(feed_props, "feed_url")
-                                and not feed_props.feed_url
+                                and not feed_props.feed_url  # type: ignore
                             )
-                        ):  # type: ignore
+                        ):
                             try:
                                 feed_tree = self.api.get_feed_tree(include_empty=True)
 
