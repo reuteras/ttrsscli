@@ -108,7 +108,7 @@ class ttrsscli(App[None]):
         "progress": ProgressScreen,
     }
 
-    CSS_PATH: str = "styles.tcss"
+    CSS_PATH: Final[list[str | PurePath]] = "styles.tcss"
 
     def __init__(self) -> None:
         """Connect to Tiny Tiny RSS and initialize the app."""
