@@ -125,7 +125,7 @@ class TTRSSClient:
     def mark_read(self, article_id) -> None:
         """Mark article as read, retrying if session expires."""
         try:
-            self.api.mark_read(article_id=article_id)
+            self.api.mark_read(article_ids=article_id)
         except Exception as e:
             logger.error(msg=f"Error marking article {article_id} as read: {e}")
         # Invalidate relevant cache entries
@@ -135,7 +135,7 @@ class TTRSSClient:
     def mark_unread(self, article_id) -> None:
         """Mark article as unread, retrying if session expires."""
         try:
-            self.api.mark_unread(article_id=article_id)
+            self.api.mark_unread(article_ids=article_id)
         except Exception as e:
             logger.error(msg=f"Error marking article {article_id} as unread: {e}")
         # Invalidate relevant cache entries
@@ -156,7 +156,7 @@ class TTRSSClient:
     def toggle_unread(self, article_id) -> None:
         """Toggle article read/unread, retrying if session expires."""
         try:
-            self.api.toggle_unread(article_id=article_id)
+            self.api.toggle_unread(article_ids=article_id)
         except Exception as e:
             logger.error(
                 msg=f"Error toggling read/unread for article {article_id}: {e}"
