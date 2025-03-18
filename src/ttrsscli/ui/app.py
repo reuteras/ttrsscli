@@ -7,8 +7,8 @@ import sys
 import tempfile
 import webbrowser
 from datetime import datetime
-from pathlib import Path
-from typing import Any, ClassVar, Literal
+from pathlib import Path, PurePath
+from typing import Any, ClassVar, Final, Literal
 
 import httpx
 from textual import work
