@@ -1146,7 +1146,7 @@ class ttrsscli(App[None]):
 
         # Determine if the selected item is a category or feed
         # Show all articles by default
-        feed_id = -4
+        feed_id = -3
         is_cat = False
         if (
             not isinstance(show_id, int)
@@ -1171,7 +1171,8 @@ class ttrsscli(App[None]):
             )
 
             # Sort articles, first by feed title, then by published date (newest first)
-            articles.sort(key=lambda a: a.feed_title or "")  # type: ignore
+            if feed_id != -6:
+                articles.sort(key=lambda a: a.feed_title or "")  # type: ignore
 
             feed_title: str = ""
             for article in articles:
@@ -1180,7 +1181,7 @@ class ttrsscli(App[None]):
 
                 # Add feed title header if grouping by feeds is enabled and this is a new feed
                 if self.group_feeds and article.feed_title not in [feed_title, ""]:  # type: ignore
-                    article_id: str = f"ft_{article.feed_id}"  # type: ignore
+                    article_id: str = f"ft_{article.feed_id}" if feed_id != -6 else f"ft_{article.feed_id}_{article.id}" # type: ignore
                     feed_title = html.unescape(article.feed_title.strip())  # type: ignore
                     if article_id not in article_ids:
                         feed_title_item = ListItem(
