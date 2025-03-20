@@ -934,7 +934,8 @@ class ttrsscli(App[None]):
         version_info: str = (
             f"ttrsscli version: {self.configuration.version}\n"
             f"Python: {sys.version.split()[0]}\n"
-            f"Textual: {metadata.version(distribution_name='textual')}"
+            f"Textual: {metadata.version(distribution_name='textual')}\n"
+            f"ttrss-python: {metadata.version(distribution_name='ttrss-python')}"
         )
         self.notify(
             title="Version Info",
