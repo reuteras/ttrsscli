@@ -1238,15 +1238,15 @@ wheels = [
 
 [[package]]
 name = "ttrss-python"
-version = "0.5"
-source = { git = "https://github.com/reuteras/ttrss-python.git#4455a94cc8ca034a4ff05b72913bc1ae79a4d928" }
+version = "0.6"
+source = { git = "https://github.com/reuteras/ttrss-python.git#841acf5cd51c5ca3fd0806fdfe1096451aab472a" }
 dependencies = [
     { name = "requests" },
 ]
 
 [[package]]
 name = "ttrsscli"
-version = "0.2.1"
+version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
