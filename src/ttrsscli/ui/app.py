@@ -3,6 +3,7 @@
 import html
 import logging
 import os
+import re
 import subprocess
 import sys
 import webbrowser
@@ -526,8 +527,8 @@ class ttrsscli(App[None]):
             "<URL>", self.current_article_url
         )
         content = content.replace("<ID>", datetime.now().strftime(format="%Y%m%d%H%M"))
-        content = content.replace("<CONTENT>", self.content_markdown_original)
         content = content.replace("<TITLE>", self.current_article_title)
+        content = content.replace("<CONTENT>", re.sub(pattern=r"\n$", repl="\n\n", string=self.content_markdown_original, flags=re.MULTILINE))
 
         # Build tags
         tags: str = self.configuration.obsidian_default_tag + "  \n"
