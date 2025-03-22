@@ -22,7 +22,7 @@ def get_clean_url(url: str, clean_url_enabled: bool = True) -> str:
 
     if clean_url_enabled:
         try:
-            cleaned_url: Result | None = cleanurl(url=url)
+            cleaned_url: Result | None = cleanurl(url=url, respect_semantics=True)
             if cleaned_url:
                 return cleaned_url.url
         except Exception as e:
