@@ -37,6 +37,7 @@ token = "your_readwise_token"  # Or use 1Password CLI integration
 
 [obsidian]
 # Obsidian integration settings
+directory = "/Users/<username>/Documents"
 vault = "YourVaultName"
 folder = "News"
 default_tag = "type/news"
@@ -237,6 +238,9 @@ class Configuration:
 
             # Get obsidian settings
             obsidian_config = self.config.get("obsidian", {})
+            self.obsidian_directory: str = get_conf_value(
+                op_command=obsidian_config.get("directory", "")
+            )
             self.obsidian_vault: str = get_conf_value(
                 op_command=obsidian_config.get("vault", "")
             )
