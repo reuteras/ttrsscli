@@ -3,12 +3,14 @@
 import html
 import logging
 import os
+import subprocess
 import sys
-import tempfile
 import webbrowser
 from datetime import datetime
 from pathlib import Path, PurePath
+from time import sleep
 from typing import Any, ClassVar, Final, Literal
+from urllib.parse import quote
 
 import httpx
 from textual import work
@@ -557,8 +559,6 @@ class ttrsscli(App[None]):
         content = content.replace("\n\n", "\n")
 
         # Encode title and content for URL format
-        from urllib.parse import quote
-
         encoded_title: str = quote(string=title).replace("/", "%2F")
         encoded_content: str = quote(string=content)
 
@@ -567,50 +567,41 @@ class ttrsscli(App[None]):
         if len(encoded_content) > max_url_length:
             self.notify(
                 title="Obsidian",
-                message="Content too large for URI. Creating temporary file...",
-                timeout=3,
+                message="Content too large for URI. Creating file instead...",
+                timeout=5,
             )
 
-            # Create a temporary file instead
+            # Create file directly in Obsidian vault
             try:
-                temp_path = Path(tempfile.mktemp(suffix=".md"))
-                temp_path.write_text(data=content, encoding="utf-8")
-
-                self.temp_files.append(temp_path)  # Track for cleanup
-
-                # Open Obsidian with the file path
-                obsidian_uri = f"obsidian://open?vault={self.configuration.obsidian_vault}&file={encoded_title}"
-                webbrowser.open(url=obsidian_uri)
-
-                # Wait a moment for Obsidian to open
-                from time import sleep
+                obsidian_path = Path(self.configuration.obsidian_directory + "/" + self.configuration.obsidian_vault + "/" + title + ".md")
+                obsidian_path.write_text(data=content, encoding="utf-8")
 
                 sleep(1)
-
-                # Now tell the user to manually import the file
                 self.notify(
                     title="Obsidian",
-                    message=f"Please import the file manually: {temp_path}",
+                    message=f"Created the file: {obsidian_path}",
                     timeout=10,
                 )
 
                 # Try to open the file in the default application
                 if sys.platform == "win32":
-                    os.startfile(temp_path)
+                    os.startfile(obsidian_path)
                 elif sys.platform == "darwin":
-                    import subprocess
-
-                    subprocess.call(args=["open", str(object=temp_path)])
-                else:  # Linux and other Unix-like
-                    import subprocess
-
-                    subprocess.call(["xdg-open", str(temp_path)])
+                    obsidian_uri = f"obsidian://open?vault={self.configuration.obsidian_vault}&file={obsidian_path}"
+                    subprocess.run(args=["open", obsidian_uri], check=False)
+                else:  # Linux and other Unix-like systems
+                    try:
+                        subprocess.call(["xdg-open", str(obsidian_path)])
+                    except Exception:
+                        # Open Obsidian with the file path
+                        obsidian_uri = f"obsidian://open?vault={self.configuration.obsidian_vault}&file={encoded_title}"
+                        webbrowser.open(url=obsidian_uri)
 
             except Exception as e:
-                logger.error(msg=f"Error creating temporary file: {e}")
+                logger.error(msg=f"Error creating file: {e}")
                 self.notify(
                     title="Obsidian",
-                    message=f"Error creating temporary file: {e}",
+                    message=f"Error creating file: {e}",
                     timeout=5,
                     severity="error",
                 )
@@ -1171,7 +1162,7 @@ class ttrsscli(App[None]):
             )
 
             # Sort articles, first by feed title, then by published date (newest first)
-            if feed_id != -6:
+            if feed_id != -6:  # noqa: PLR2004
                 articles.sort(key=lambda a: a.feed_title or "")  # type: ignore
 
             feed_title: str = ""
@@ -1181,7 +1172,7 @@ class ttrsscli(App[None]):
 
                 # Add feed title header if grouping by feeds is enabled and this is a new feed
                 if self.group_feeds and article.feed_title not in [feed_title, ""]:  # type: ignore
-                    article_id: str = f"ft_{article.feed_id}" if feed_id != -6 else f"ft_{article.feed_id}_{article.id}" # type: ignore
+                    article_id: str = f"ft_{article.feed_id}" if feed_id != -6 else f"ft_{article.feed_id}_{article.id}" # type: ignore  # noqa: PLR2004
                     feed_title = html.unescape(article.feed_title.strip())  # type: ignore
                     if article_id not in article_ids:
                         feed_title_item = ListItem(
@@ -1361,14 +1352,6 @@ class ttrsscli(App[None]):
 
     def on_unmount(self) -> None:
         """Clean up resources when app is closed."""
-        # Clean up any temporary files
-        for temp_file in self.temp_files:
-            try:
-                if temp_file.exists():
-                    temp_file.unlink()
-            except Exception as e:
-                logger.error(msg=f"Error removing temporary file {temp_file}: {e}")
-
         # Close the HTTP client
         if hasattr(self, "http_client"):
             self.http_client.close()
