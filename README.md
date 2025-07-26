@@ -19,7 +19,7 @@
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Tiny Tiny RSS instance
 - (Optional) [1Password CLI](https://developer.1password.com/docs/cli) for secure credential and configuration management
 

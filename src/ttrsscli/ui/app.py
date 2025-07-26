@@ -410,8 +410,8 @@ class ttrsscli(App[None]):
 
         try:
             os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
-            import readwise
-            from readwise.model import PostResponse
+            import readwise  # noqa: PLC0415
+            from readwise.model import PostResponse  # noqa: PLC0415
 
             # Show a progress indicator during the API call
             self.push_screen(screen="progress")
@@ -921,7 +921,7 @@ class ttrsscli(App[None]):
 
     def action_show_version(self) -> None:
         """Show version information."""
-        from importlib import metadata
+        from importlib import metadata  # noqa: PLC0415
 
         version_info: str = (
             f"ttrsscli version: {self.configuration.version}\n"

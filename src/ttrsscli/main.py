@@ -38,13 +38,5 @@ def main() -> None:
         sys.exit(1)
 
 
-def main_web() -> None:
-    """Run the ttrsscli app in web mode."""
-    from textual_serve.server import Server
-
-    app = Server(command="ttrsscli")
-    app.serve()
-
-
 if __name__ == "__main__":
     main()

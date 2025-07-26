@@ -4,12 +4,9 @@ A terminal-based application that provides a text user interface (TUI) for readi
 articles from a Tiny Tiny RSS instance.
 """
 
-from .main import main, main_web
+from .main import main
 
-__all__: list[str] = ["main", "main_web"]
-
-if __name__ == "__main_web__":
-    main_web()  # pragma: no cover
+__all__: list[str] = ["main"]
 
 if __name__ == "__main__":
     main()  # pragma: no cover

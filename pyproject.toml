@@ -13,7 +13,7 @@ classifiers = [
     "Environment :: Console",
 ]
 license = { text = "MIT" }
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.13.3",
     "cleanurl>=0.1.15",
@@ -29,7 +29,6 @@ dependencies = [
 ]
 [project.scripts]
 ttrsscli = "ttrsscli.main:main"
-ttrsscli-web = "ttrsscli.main:main_web"
 
 [project.urls]
 Homepage = "https://github.com/reuteras/ttrsscli"
