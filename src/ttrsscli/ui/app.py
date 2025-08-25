@@ -882,11 +882,23 @@ class ttrsscli(App[None]):
     @work
     async def action_refresh(self) -> None:
         """Refresh categories and articles from the server."""
+        logger.info(msg="Manual refresh initiated by user")
         self.client.clear_cache()  # Clear cache to force fresh data
         self.notify(message="Refreshing data from server...", title="Refresh")
-        await self.refresh_categories()
-        await self.refresh_articles()
-        self.notify(message="Refresh complete", title="Refresh")
+        
+        try:
+            await self.refresh_categories()
+            await self.refresh_articles()
+            logger.info(msg="Manual refresh completed successfully")
+            self.notify(message="Refresh complete", title="Refresh")
+        except Exception as err:
+            logger.error(msg=f"Manual refresh failed: {err}")
+            logger.error(msg=f"Exception type: {type(err).__name__}")
+            self.notify(
+                message=f"Refresh failed: {err}",
+                title="Refresh Error",
+                severity="error"
+            )
 
     async def action_search(self) -> None:
         """Search for articles."""
@@ -1158,9 +1170,11 @@ class ttrsscli(App[None]):
         await list_view.clear()
 
         try:
+            logger.debug(msg=f"Fetching articles for feed_id={feed_id}, is_cat={is_cat}, view_mode={view_mode}")
             articles: list[Article] = self.client.get_headlines(
                 feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
             )
+            logger.info(msg=f"Retrieved {len(articles) if articles else 0} articles")
 
             # Sort articles, first by feed title, then by published date (newest first)
             if feed_id != -6:  # noqa: PLR2004
@@ -1226,6 +1240,8 @@ class ttrsscli(App[None]):
 
         except Exception as err:
             logger.error(msg=f"Error fetching articles: {err}")
+            logger.error(msg=f"Exception type: {type(err).__name__}")
+            logger.debug(msg=f"Full traceback:", exc_info=True)
             self.notify(
                 title="Articles",
                 message=f"Error fetching articles: {err}",
@@ -1236,10 +1252,13 @@ class ttrsscli(App[None]):
     async def refresh_categories(self) -> None:
         """Load categories from TTRSS and filter based on unread-only mode."""
         try:
+            logger.info(msg="Starting category refresh...")
             existing_ids: list[str] = []
 
             # Get all categories
+            logger.debug(msg="Fetching categories from server...")
             categories = self.client.get_categories()
+            logger.info(msg=f"Retrieved {len(categories) if categories else 0} categories")
 
             # Get ListView for categories and clear it
             list_view: ListView = self.query_one(
@@ -1344,8 +1363,10 @@ class ttrsscli(App[None]):
 
         except Exception as err:
             logger.error(msg=f"Error refreshing categories: {err}")
+            logger.error(msg=f"Exception type: {type(err).__name__}")
+            logger.debug(msg=f"Full traceback:", exc_info=True)
             self.notify(
-                title="Categories",
+                title="Categories", 
                 message=f"Error refreshing categories: {err}",
                 timeout=5,
                 severity="error",

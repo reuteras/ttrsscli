@@ -39,9 +39,24 @@ def handle_session_expiration(api_method: Callable) -> Callable:
                     logger.error(msg="Re-authentication failed after connection reset")
                     raise RuntimeError("Re-authentication failed") from err
             except Exception as err:
-                if "NOT_LOGGED_IN" in str(object=err):
+                # Check for various session expiration indicators
+                error_str = str(object=err).upper()
+                session_indicators = [
+                    "NOT_LOGGED_IN",
+                    "SESSION_EXPIRED", 
+                    "UNAUTHORIZED",
+                    "AUTHENTICATION_FAILED",
+                    "INVALID_SESSION",
+                    "LOGIN_ERROR",
+                    "403",  # HTTP Forbidden
+                    "401",  # HTTP Unauthorized
+                ]
+                
+                is_session_error = any(indicator in error_str for indicator in session_indicators)
+                
+                if is_session_error:
                     logger.warning(
-                        msg=f"Session expired: {err}. Retrying ({retry_count + 1}/{max_retries})..."
+                        msg=f"Session expired/authentication error: {err}. Retrying ({retry_count + 1}/{max_retries})..."
                     )
                     retry_count += 1
 
@@ -52,6 +67,8 @@ def handle_session_expiration(api_method: Callable) -> Callable:
                         )
                         raise RuntimeError("Re-authentication failed") from err
                 else:
+                    # Log the unhandled error type for debugging
+                    logger.debug(msg=f"Non-session error in {api_method.__name__}: {err}")
                     # If it's not a session issue, just raise the exception
                     raise
 
