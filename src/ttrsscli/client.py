@@ -54,7 +54,7 @@ class TTRSSClient:
             logger.info(msg="Successfully authenticated with TTRSS")
             return True
         except Exception as e:
-            logger.error(msg=f"Login failed: {e}")
+            logger.error(msg=f"Login failed: {type(e).__name__}: {e}")
             return False
 
     @handle_session_expiration
@@ -82,7 +82,7 @@ class TTRSSClient:
         try:
             categories: list[Category] = self.api.get_categories()
         except Exception as e:
-            logger.error(msg=f"Error fetching categories: {e}")
+            logger.error(msg=f"Error fetching categories: {type(e).__name__}: {e}")
             return []
         self.cache[cache_key] = categories
         return categories
@@ -116,7 +116,7 @@ class TTRSSClient:
                 feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
             )
         except Exception as e:
-            logger.error(msg=f"Error fetching headlines for feed {feed_id}: {e}")
+            logger.error(msg=f"Error fetching headlines for feed {feed_id}: {type(e).__name__}: {e}")
             return []
         self.cache[cache_key] = headlines
         return headlines
