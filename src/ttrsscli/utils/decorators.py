@@ -67,8 +67,8 @@ def handle_session_expiration(api_method: Callable) -> Callable:
                         )
                         raise RuntimeError("Re-authentication failed") from err
                 else:
-                    # Log the unhandled error type for debugging
-                    logger.debug(msg=f"Non-session error in {api_method.__name__}: {err}")
+                    # Log the unhandled error type for debugging with full details
+                    logger.error(msg=f"Non-session error in {api_method.__name__}: {type(err).__name__}: {err}")
                     # If it's not a session issue, just raise the exception
                     raise
 
