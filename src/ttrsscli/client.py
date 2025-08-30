@@ -123,7 +123,9 @@ class TTRSSClient:
                 feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
             )
         except Exception as e:
-            logger.error(msg=f"Error fetching headlines for feed {feed_id}: {type(e).__name__}: {e}")
+            logger.error(
+                msg=f"Error fetching headlines for feed {feed_id}: {type(e).__name__}: {e}"
+            )
             return []
         self.cache[cache_key] = headlines
         return headlines
@@ -266,7 +268,8 @@ class TTRSSClient:
                 for category in categories:
                     try:
                         feeds: list[Feed] = self.get_feeds(
-                            cat_id=category.id, unread_only=False  # type: ignore
+                            cat_id=category.id,
+                            unread_only=False,  # type: ignore
                         )
                         all_feeds.extend(feeds)
                     except Exception as feed_err:

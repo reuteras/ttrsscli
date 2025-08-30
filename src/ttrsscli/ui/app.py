@@ -19,6 +19,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches, WrongType
 from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
@@ -30,6 +31,7 @@ from urllib3.exceptions import NameResolutionError
 
 from ..cache import LimitedSizeDict
 from ..client import TTRSSClient
+from ..utils.error_handling import log_and_notify
 from ..utils.markdown_converter import (
     escape_markdown_formatting,
     extract_links,
@@ -111,7 +113,7 @@ class ttrsscli(App[None]):
         "progress": ProgressScreen,
     }
 
-    CSS_PATH: Final[list[str | PurePath]] = [ "styles.tcss" ]
+    CSS_PATH: Final[list[str | PurePath]] = ["styles.tcss"]
 
     def __init__(self) -> None:
         """Connect to Tiny Tiny RSS and initialize the app."""
@@ -133,7 +135,7 @@ class ttrsscli(App[None]):
             "- Select a category to see articles\n"
             "- Select an article to read its content\n"
         )
-        
+
         self.LOADING_TEXT: str = (
             "# ttrsscli\n\n"
             "Loading your RSS feeds...\n\n"
@@ -159,7 +161,9 @@ class ttrsscli(App[None]):
         self.show_header: bool = False
         self.show_unread_only = reactive(default=True)
         self.show_special_categories: bool = False
-        self.tags = LimitedSizeDict(max_size=10000)  # Use default, will be updated when config loads
+        self.tags = LimitedSizeDict(
+            max_size=10000
+        )  # Use default, will be updated when config loads
         self.temp_files: list[Path] = []  # List of temporary files to clean up on exit
 
         # Create httpx client for downloads
@@ -170,6 +174,7 @@ class ttrsscli(App[None]):
         """Lazy load configuration when first accessed."""
         if self._configuration is None:
             from ..config import Configuration  # noqa: PLC0415
+
             self._configuration = Configuration(arguments=self._config_args)
             # Update theme based on loaded configuration
             self.theme = (
@@ -178,19 +183,25 @@ class ttrsscli(App[None]):
                 else "textual-light"
             )
             # Update cache size if needed
-            if hasattr(self, 'tags') and self.tags.max_size != self._configuration.cache_size:
+            if (
+                hasattr(self, "tags")
+                and self.tags.max_size != self._configuration.cache_size
+            ):
                 self.tags = LimitedSizeDict(max_size=self._configuration.cache_size)
             # Update header with version
             try:
                 header = self.query_one(Header)
                 header.name = f"ttrsscli v{self._configuration.version}"
-            except:
-                pass  # Header may not be mounted yet
+            except (NoMatches, WrongType):
+                # Header may not be mounted yet, this is expected during initialization
+                pass
         return self._configuration
 
     def compose(self) -> ComposeResult:
         """Compose the three pane layout."""
-        yield Header(show_clock=True, name="ttrsscli")  # Version will be updated when config loads
+        yield Header(
+            show_clock=True, name="ttrsscli"
+        )  # Version will be updated when config loads
         with Horizontal():
             yield ListView(id="categories")
             with Vertical():
@@ -217,49 +228,45 @@ class ttrsscli(App[None]):
         try:
             # Show connecting message
             self.notify(message="Loading configuration...", title="Startup")
-            
+
             # Load configuration asynchronously in thread pool to avoid blocking UI
-            config = await asyncio.get_event_loop().run_in_executor(None, lambda: self.configuration)
-            
+            config = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self.configuration
+            )
+
             self.notify(message="Connecting to Tiny Tiny RSS...", title="Startup")
-            
+
             # Initialize client (no network operations yet)
             self.client = TTRSSClient(
                 url=config.api_url,
                 username=config.username,
                 password=config.password,
             )
-            
+
             # Authenticate asynchronously
             self.notify(message="Authenticating...", title="Startup")
-            
+
             # Run the blocking login operation in a thread pool
-            login_success = await asyncio.get_event_loop().run_in_executor(None, self.client.login)
-            
+            login_success = await asyncio.get_event_loop().run_in_executor(
+                None, self.client.login
+            )
+
             if not login_success:
                 raise TTRNotLoggedIn("Authentication failed")
-            
+
             # Load data with loading indicators (don't wait for completion)
             self.notify(message="Loading data...", title="Startup")
-            
+
             # Start loading data in background - don't await so startup continues
             self._data_loading_task = asyncio.create_task(self.load_initial_data())
-            
+
         except NameResolutionError as e:
-            logger.error(msg=f"Error connecting to Tiny Tiny RSS: {e}")
-            self.notify(
-                title="Connection Error",
-                message=f"Error connecting to Tiny Tiny RSS: {e!s}",
-                timeout=5,
-                severity="error",
+            log_and_notify(
+                self, e, "Connection Error", f"Error connecting to Tiny Tiny RSS: {e!s}"
             )
         except TTRNotLoggedIn as e:
-            logger.error(msg=f"Error logging in to Tiny Tiny RSS: {e}")
-            self.notify(
-                title="Login Error",
-                message=f"Error logging in to Tiny Tiny RSS: {e!s}",
-                timeout=5,
-                severity="error",
+            log_and_notify(
+                self, e, "Login Error", f"Error logging in to Tiny Tiny RSS: {e!s}"
             )
 
     async def load_initial_data(self) -> None:
@@ -268,17 +275,17 @@ class ttrsscli(App[None]):
             # Load categories and articles in parallel
             categories_task = asyncio.create_task(self.refresh_categories())
             articles_task = asyncio.create_task(self.refresh_articles())
-            
+
             # Wait for both to complete
             await asyncio.gather(categories_task, articles_task)
-            
+
             # Update content to show welcome message
             self.content_markdown = self.START_TEXT
-            
+
             # Remove the old content viewer
             content_viewer = self.query_one(selector="#content")
             await content_viewer.remove()
-            
+
             # Create and mount a new one with the welcome message
             new_viewer = LinkableMarkdownViewer(
                 markdown=self.content_markdown,
@@ -288,9 +295,9 @@ class ttrsscli(App[None]):
             )
             content_container = self.query_one(selector="Vertical")
             await content_container.mount(new_viewer)
-            
+
             self.notify(message="Ready!", title="Startup", timeout=2)
-            
+
         except Exception as e:
             logger.error(msg=f"Error loading initial data: {e}")
             self.notify(
@@ -359,8 +366,7 @@ class ttrsscli(App[None]):
                     self.selected_article_ids.add(article_id)
                     await self.display_article_content(article_id=article_id)
         except Exception as err:
-            logger.error(msg=f"Error handling list view highlight: {err}")
-            self.notify(message=f"Error: {err}", title="Error", severity="error")
+            log_and_notify(self, err, "Error")
 
     async def on_list_view_selected(self, message: Message) -> None:
         """Called when an item is selected in the ListView."""
@@ -394,8 +400,7 @@ class ttrsscli(App[None]):
                     self.selected_article_ids.add(article_id)
                     await self.display_article_content(article_id=article_id)
         except Exception as err:
-            logger.error(msg=f"Error handling list view selection: {err}")
-            self.notify(message=f"Error: {err}", title="Error", severity="error")
+            log_and_notify(self, err, "Error")
 
     @work
     async def action_add_feed(self) -> None:
@@ -619,7 +624,15 @@ class ttrsscli(App[None]):
         )
         content = content.replace("<ID>", datetime.now().strftime(format="%Y%m%d%H%M"))
         content = content.replace("<TITLE>", self.current_article_title)
-        content = content.replace("<CONTENT>", re.sub(pattern=r"\n$", repl="\n\n", string=self.content_markdown_original, flags=re.MULTILINE))
+        content = content.replace(
+            "<CONTENT>",
+            re.sub(
+                pattern=r"\n$",
+                repl="\n\n",
+                string=self.content_markdown_original,
+                flags=re.MULTILINE,
+            ),
+        )
 
         # Build tags
         tags: str = self.configuration.obsidian_default_tag + "  \n"
@@ -665,7 +678,14 @@ class ttrsscli(App[None]):
 
             # Create file directly in Obsidian vault
             try:
-                obsidian_path = Path(self.configuration.obsidian_directory + "/" + self.configuration.obsidian_vault + "/" + title + ".md")
+                obsidian_path = Path(
+                    self.configuration.obsidian_directory
+                    + "/"
+                    + self.configuration.obsidian_vault
+                    + "/"
+                    + title
+                    + ".md"
+                )
                 obsidian_path.write_text(data=content, encoding="utf-8")
 
                 sleep(1)
@@ -976,7 +996,7 @@ class ttrsscli(App[None]):
         logger.info(msg="Manual refresh initiated by user")
         self.client.clear_cache()  # Clear cache to force fresh data
         self.notify(message="Refreshing data from server...", title="Refresh")
-        
+
         try:
             await self.refresh_categories()
             await self.refresh_articles()
@@ -988,7 +1008,7 @@ class ttrsscli(App[None]):
             self.notify(
                 message=f"Refresh failed: {err}",
                 title="Refresh Error",
-                severity="error"
+                severity="error",
             )
 
     async def action_search(self) -> None:
@@ -1160,10 +1180,8 @@ class ttrsscli(App[None]):
         header_items = []
 
         # Fix escaped brackets in title for proper display
-        clean_title = self.current_article_title.replace('\\[', '[')
-        header_items.append(
-            f"> **Title:** {clean_title}  "
-        )
+        clean_title = self.current_article_title.replace("\\[", "[")
+        header_items.append(f"> **Title:** {clean_title}  ")
         header_items.append(f"> **URL:** {self.current_article_url}  ")
 
         # Add article metadata if available
@@ -1263,7 +1281,9 @@ class ttrsscli(App[None]):
         await list_view.clear()
 
         try:
-            logger.debug(msg=f"Fetching articles for feed_id={feed_id}, is_cat={is_cat}, view_mode={view_mode}")
+            logger.debug(
+                msg=f"Fetching articles for feed_id={feed_id}, is_cat={is_cat}, view_mode={view_mode}"
+            )
             articles: list[Article] = self.client.get_headlines(
                 feed_id=feed_id, is_cat=is_cat, view_mode=view_mode
             )
@@ -1280,7 +1300,11 @@ class ttrsscli(App[None]):
 
                 # Add feed title header if grouping by feeds is enabled and this is a new feed
                 if self.group_feeds and article.feed_title not in [feed_title, ""]:  # type: ignore
-                    article_id: str = f"ft_{article.feed_id}" if feed_id != -6 else f"ft_{article.feed_id}_{article.id}" # type: ignore  # noqa: PLR2004
+                    article_id: str = (
+                        f"ft_{article.feed_id}"
+                        if feed_id != -6
+                        else f"ft_{article.feed_id}_{article.id}"
+                    )  # type: ignore  # noqa: PLR2004
                     feed_title = html.unescape(article.feed_title.strip())  # type: ignore
                     if article_id not in article_ids:
                         feed_title_item = ListItem(
@@ -1351,7 +1375,9 @@ class ttrsscli(App[None]):
             # Get all categories
             logger.debug(msg="Fetching categories from server...")
             categories = self.client.get_categories()
-            logger.info(msg=f"Retrieved {len(categories) if categories else 0} categories")
+            logger.info(
+                msg=f"Retrieved {len(categories) if categories else 0} categories"
+            )
 
             # Get ListView for categories and clear it
             list_view: ListView = self.query_one(
@@ -1459,7 +1485,7 @@ class ttrsscli(App[None]):
             logger.error(msg=f"Exception type: {type(err).__name__}")
             logger.debug(msg="Full traceback:", exc_info=True)
             self.notify(
-                title="Categories", 
+                title="Categories",
                 message=f"Error refreshing categories: {err}",
                 timeout=5,
                 severity="error",

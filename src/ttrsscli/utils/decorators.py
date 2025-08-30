@@ -6,13 +6,7 @@ from collections.abc import Callable
 from time import sleep
 from typing import Any
 
-try:
-    from ttrss.exceptions import TTRNotLoggedIn
-except ImportError:
-    # Create a dummy exception class if import fails
-    class TTRNotLoggedIn(Exception):
-        """Dummy TTRNotLoggedIn exception for when ttrss module is not available."""
-        pass
+from ttrss.exceptions import TTRNotLoggedIn
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
@@ -49,13 +43,13 @@ def handle_session_expiration(api_method: Callable) -> Callable:
             except Exception as err:
                 # Check for TTRNotLoggedIn exception type first
                 is_session_error = isinstance(err, TTRNotLoggedIn)
-                
+
                 # Also check for various session expiration indicators in error message
                 if not is_session_error:
                     error_str = str(object=err).upper()
                     session_indicators = [
                         "NOT_LOGGED_IN",
-                        "SESSION_EXPIRED", 
+                        "SESSION_EXPIRED",
                         "UNAUTHORIZED",
                         "AUTHENTICATION_FAILED",
                         "INVALID_SESSION",
@@ -63,8 +57,10 @@ def handle_session_expiration(api_method: Callable) -> Callable:
                         "403",  # HTTP Forbidden
                         "401",  # HTTP Unauthorized
                     ]
-                    is_session_error = any(indicator in error_str for indicator in session_indicators)
-                
+                    is_session_error = any(
+                        indicator in error_str for indicator in session_indicators
+                    )
+
                 if is_session_error:
                     logger.warning(
                         msg=f"Session expired/authentication error: {err}. Retrying ({retry_count + 1}/{max_retries})..."
@@ -79,7 +75,9 @@ def handle_session_expiration(api_method: Callable) -> Callable:
                         raise RuntimeError("Re-authentication failed") from err
                 else:
                     # Log the unhandled error type for debugging with full details
-                    logger.error(msg=f"Non-session error in {api_method.__name__}: {type(err).__name__}: {err}")
+                    logger.error(
+                        msg=f"Non-session error in {api_method.__name__}: {type(err).__name__}: {err}"
+                    )
                     # If it's not a session issue, just raise the exception
                     raise
 

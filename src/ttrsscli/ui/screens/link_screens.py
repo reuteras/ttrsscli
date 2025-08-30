@@ -2,6 +2,8 @@
 
 import logging
 import os
+import webbrowser
+from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
@@ -9,6 +11,17 @@ import httpx
 from textual.app import ComposeResult
 from textual.screen import ModalScreen
 from textual.widgets import Label, ListItem, ListView
+
+# Optional imports for specific functionality
+try:
+    import readwise
+    from readwise.model import PostResponse
+
+    READWISE_AVAILABLE = True
+except ImportError:
+    readwise = None
+    PostResponse = None
+    READWISE_AVAILABLE = False
 
 logger = logging.getLogger(name=__name__)
 
@@ -182,8 +195,6 @@ class LinkSelectionScreen(ModalScreen):
             link: The URL to process
         """
         if self.open_links == "browser":
-            import webbrowser
-
             webbrowser.open(url=link)
             self.notify(title="Opening", message="Opening link in browser", timeout=3)
         elif self.open_links == "download":
@@ -222,9 +233,6 @@ class LinkSelectionScreen(ModalScreen):
             link: URL to download
         """
         try:
-            from pathlib import Path
-            from urllib.parse import urlparse
-
             # Extract filename from URL
             filename: str = Path(urlparse(url=link).path).name
             if not filename:
@@ -268,9 +276,10 @@ class LinkSelectionScreen(ModalScreen):
             link: URL to save
         """
         try:
+            if not READWISE_AVAILABLE:
+                raise ImportError("Readwise library not available")
+
             os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
-            import readwise
-            from readwise.model import PostResponse
 
             # Show a progress indicator during the API call
             self.app.push_screen(screen="progress")
@@ -288,8 +297,6 @@ class LinkSelectionScreen(ModalScreen):
                     timeout=5,
                 )
                 if self.open:
-                    import webbrowser
-
                     webbrowser.open(url=response[1].url)
             else:
                 self.notify(
