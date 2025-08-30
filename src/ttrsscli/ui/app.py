@@ -191,20 +191,12 @@ class ttrsscli(App[None]):
                 and self.tags.max_size != self._configuration.cache_size
             ):
                 self.tags = LimitedSizeDict(max_size=self._configuration.cache_size)
-            # Update header with version
-            try:
-                header = self.query_one(Header)
-                header.name = f"ttrsscli v{self._configuration.version}"
-            except (NoMatches, WrongType):
-                # Header may not be mounted yet, this is expected during initialization
-                pass
+            # Header version is updated when the header is initially created
         return self._configuration
 
     def compose(self) -> ComposeResult:
         """Compose the three pane layout."""
-        yield Header(
-            show_clock=True, name="ttrsscli"
-        )  # Version will be updated when config loads
+        yield Header(show_clock=True, name="ttrsscli")
         with Horizontal():
             yield ListView(id="categories")
             with Vertical():
