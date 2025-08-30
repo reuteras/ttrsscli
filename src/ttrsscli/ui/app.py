@@ -19,7 +19,6 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.css.query import NoMatches, WrongType
 from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
@@ -114,7 +113,7 @@ class ttrsscli(App[None]):
     }
 
     CSS_PATH: Final[list[str | PurePath]] = ["styles.tcss"]
-    
+
     # Feed ID constants
     RECENTLY_READ_FEED_ID: Final[int] = -6  # Special feed ID for recently read articles
 
@@ -129,12 +128,14 @@ class ttrsscli(App[None]):
         # Use default dark theme for now - will be updated when config loads
         self.theme = "textual-dark"
 
+        # START_TEXT will be updated with version when config loads
         self.START_TEXT: str = (
             "# Welcome to ttrsscli!\n\n"
             "A text-based interface for Tiny Tiny RSS.\n\n"
             "## Quick Start\n\n"
             "- Use **Tab** and **Shift+Tab** to navigate between panes\n"
-            "- Press **?** for help\n"
+            "- Navigate with **Vim-style keybindings** (j/k, J/K, etc.)\n"
+            "- Press **?** for help with all keyboard shortcuts\n"
             "- Select a category to see articles\n"
             "- Select an article to read its content\n"
         )
@@ -191,6 +192,17 @@ class ttrsscli(App[None]):
                 and self.tags.max_size != self._configuration.cache_size
             ):
                 self.tags = LimitedSizeDict(max_size=self._configuration.cache_size)
+            # Update START_TEXT with version information
+            self.START_TEXT = (
+                f"# Welcome to ttrsscli v{self._configuration.version}!\n\n"
+                "A text-based interface for Tiny Tiny RSS.\n\n"
+                "## Quick Start\n\n"
+                "- Use **Tab** and **Shift+Tab** to navigate between panes\n"
+                "- Navigate with **Vim-style keybindings** (j/k, J/K, etc.)\n"
+                "- Press **?** for help with all keyboard shortcuts\n"
+                "- Select a category to see articles\n"
+                "- Select an article to read its content\n"
+            )
             # Header version is updated when the header is initially created
         return self._configuration
 

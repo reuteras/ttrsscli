@@ -34,6 +34,7 @@ class HelpScreen(Screen):
 - **E**: Edit the selected feed (also allows deletion)
 
 ## Article keys
+- **A**: Mark all articles in current view as read
 - **H**: Toggle "header" (info) for article
 - **l**: Add article to Readwise
 - **L**: Add article to Readwise and open that Readwise page in browser
@@ -44,7 +45,7 @@ class HelpScreen(Screen):
 - **O**: Export markdown to Obsidian
 - **o**: Open article in browser
 - **ctrl+l**: Open list with links in article, selected link is sent to Readwise
-- **ctrl+L**: Open list with links in article, selected link is sent to Readwise and opened in browser
+- **ctrl+shift+l**: Open list with links in article, selected link is sent to Readwise and opened in browser
 - **ctrl+o**: Open list with links in article, selected link opens in browser
 - **ctrl+s**: Save selected link from article to download folder
 
