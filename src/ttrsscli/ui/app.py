@@ -114,6 +114,9 @@ class ttrsscli(App[None]):
     }
 
     CSS_PATH: Final[list[str | PurePath]] = ["styles.tcss"]
+    
+    # Feed ID constants
+    RECENTLY_READ_FEED_ID: Final[int] = -6  # Special feed ID for recently read articles
 
     def __init__(self) -> None:
         """Connect to Tiny Tiny RSS and initialize the app."""
@@ -1290,7 +1293,7 @@ class ttrsscli(App[None]):
             logger.info(msg=f"Retrieved {len(articles) if articles else 0} articles")
 
             # Sort articles, first by feed title, then by published date (newest first)
-            if feed_id != -6:  # noqa: PLR2004
+            if feed_id != self.RECENTLY_READ_FEED_ID:
                 articles.sort(key=lambda a: a.feed_title or "")  # type: ignore
 
             feed_title: str = ""
@@ -1302,9 +1305,9 @@ class ttrsscli(App[None]):
                 if self.group_feeds and article.feed_title not in [feed_title, ""]:  # type: ignore
                     article_id: str = (
                         f"ft_{article.feed_id}"
-                        if feed_id != -6
+                        if feed_id != self.RECENTLY_READ_FEED_ID
                         else f"ft_{article.feed_id}_{article.id}"
-                    )  # type: ignore  # noqa: PLR2004
+                    )  # type: ignore
                     feed_title = html.unescape(article.feed_title.strip())  # type: ignore
                     if article_id not in article_ids:
                         feed_title_item = ListItem(

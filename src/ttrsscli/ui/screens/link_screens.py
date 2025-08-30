@@ -12,16 +12,7 @@ from textual.app import ComposeResult
 from textual.screen import ModalScreen
 from textual.widgets import Label, ListItem, ListView
 
-# Optional imports for specific functionality
-try:
-    import readwise
-    from readwise.model import PostResponse
-
-    READWISE_AVAILABLE = True
-except ImportError:
-    readwise = None
-    PostResponse = None
-    READWISE_AVAILABLE = False
+# Readwise imports are handled conditionally in functions due to environment variable requirements
 
 logger = logging.getLogger(name=__name__)
 
@@ -276,10 +267,11 @@ class LinkSelectionScreen(ModalScreen):
             link: URL to save
         """
         try:
-            if not READWISE_AVAILABLE:
-                raise ImportError("Readwise library not available")
-
             os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
+            
+            # Import readwise only when needed, after setting environment variable
+            import readwise  # noqa: PLC0415
+            from readwise.model import PostResponse  # noqa: PLC0415
 
             # Show a progress indicator during the API call
             self.app.push_screen(screen="progress")
