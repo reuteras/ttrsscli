@@ -21,8 +21,8 @@ class TTRSSClient:
         self.api = TTRClient(
             url=self.url, user=self.username, password=self.password, auto_login=False
         )
-        self.login()
         self.cache = {}  # Simple cache to reduce API calls
+        self._authenticated = False
 
     def login(self) -> bool:
         """Authenticate with TTRSS and store session.
@@ -52,10 +52,17 @@ class TTRSSClient:
                     return False
 
             logger.info(msg="Successfully authenticated with TTRSS")
+            self._authenticated = True
             return True
         except Exception as e:
             logger.error(msg=f"Login failed: {type(e).__name__}: {e}")
+            self._authenticated = False
             return False
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Check if client is authenticated."""
+        return self._authenticated
 
     @handle_session_expiration
     def get_articles(self, article_id) -> list[Article]:

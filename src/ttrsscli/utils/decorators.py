@@ -6,6 +6,14 @@ from collections.abc import Callable
 from time import sleep
 from typing import Any
 
+try:
+    from ttrss.exceptions import TTRNotLoggedIn
+except ImportError:
+    # Create a dummy exception class if import fails
+    class TTRNotLoggedIn(Exception):
+        """Dummy TTRNotLoggedIn exception for when ttrss module is not available."""
+        pass
+
 logger: logging.Logger = logging.getLogger(name=__name__)
 
 
@@ -39,20 +47,23 @@ def handle_session_expiration(api_method: Callable) -> Callable:
                     logger.error(msg="Re-authentication failed after connection reset")
                     raise RuntimeError("Re-authentication failed") from err
             except Exception as err:
-                # Check for various session expiration indicators
-                error_str = str(object=err).upper()
-                session_indicators = [
-                    "NOT_LOGGED_IN",
-                    "SESSION_EXPIRED", 
-                    "UNAUTHORIZED",
-                    "AUTHENTICATION_FAILED",
-                    "INVALID_SESSION",
-                    "LOGIN_ERROR",
-                    "403",  # HTTP Forbidden
-                    "401",  # HTTP Unauthorized
-                ]
+                # Check for TTRNotLoggedIn exception type first
+                is_session_error = isinstance(err, TTRNotLoggedIn)
                 
-                is_session_error = any(indicator in error_str for indicator in session_indicators)
+                # Also check for various session expiration indicators in error message
+                if not is_session_error:
+                    error_str = str(object=err).upper()
+                    session_indicators = [
+                        "NOT_LOGGED_IN",
+                        "SESSION_EXPIRED", 
+                        "UNAUTHORIZED",
+                        "AUTHENTICATION_FAILED",
+                        "INVALID_SESSION",
+                        "LOGIN_ERROR",
+                        "403",  # HTTP Forbidden
+                        "401",  # HTTP Unauthorized
+                    ]
+                    is_session_error = any(indicator in error_str for indicator in session_indicators)
                 
                 if is_session_error:
                     logger.warning(

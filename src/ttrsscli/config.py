@@ -1,6 +1,8 @@
 """Configuration module for ttrsscli."""
 
 import argparse
+import concurrent.futures
+import json
 import logging
 import os
 import subprocess
@@ -13,6 +15,7 @@ import toml
 from urllib3.exceptions import NameResolutionError
 
 logger: logging.Logger = logging.getLogger(name=__name__)
+
 
 # Default configuration content
 DEFAULT_CONFIG = """[general]
@@ -98,6 +101,170 @@ def get_conf_value(op_command: str) -> str:
             sys.exit(1)
     else:
         return op_command
+
+
+def optimize_op_commands(config_dict: dict[str, Any]) -> dict[str, str]:  # noqa: PLR0912, PLR0915
+    """Optimally process 1Password commands to minimize CLI calls.
+    
+    This function analyzes 1Password commands to see if they reference the same
+    item and can be fetched in a single call using 'op item get' with JSON output.
+    
+    Args:
+        config_dict: Dictionary of config keys to raw values
+        
+    Returns:
+        Dictionary of config keys to processed values
+    """
+    # Separate 1Password commands from regular values
+    op_commands = {}
+    regular_values = {}
+    
+    for key, value in config_dict.items():
+        if isinstance(value, str) and value.startswith("op "):
+            op_commands[key] = value
+        else:
+            regular_values[key] = value
+    
+    # If no 1Password commands, return as-is
+    if not op_commands:
+        return {k: str(v) for k, v in config_dict.items()}
+    
+    # Group commands by 1Password item (if they use 'op item get')
+    item_groups = {}
+    individual_commands = {}
+    
+    for key, op_command in op_commands.items():
+        # Check if it's an 'op item get' command that we can optimize
+        parts = op_command.split()
+        MIN_OP_ITEM_GET_PARTS = 3
+        MIN_PARTS_WITH_ID = 4
+        if len(parts) >= MIN_OP_ITEM_GET_PARTS and parts[1] == "item" and parts[2] == "get":
+            # Extract the item identifier (usually the 4th part)
+            if len(parts) >= MIN_PARTS_WITH_ID:
+                item_id = parts[3]
+                if item_id not in item_groups:
+                    item_groups[item_id] = {}
+                
+                # Extract field name if specified
+                field_name = None
+                for i, part in enumerate(parts):
+                    if part == "--field" and i + 1 < len(parts):
+                        field_name = parts[i + 1]
+                        break
+                
+                item_groups[item_id][key] = {
+                    'command': op_command,
+                    'field': field_name
+                }
+            else:
+                individual_commands[key] = op_command
+        else:
+            individual_commands[key] = op_command
+    
+    processed_op_values = {}
+    
+    # Process grouped items in parallel (fetch entire items)
+    if item_groups:
+        def fetch_item(item_id_fields_tuple):
+            item_id, fields = item_id_fields_tuple
+            result = subprocess.run(
+                ["op", "item", "get", item_id, "--format", "json"],
+                capture_output=True, text=True, check=True
+            )
+            return item_id, fields, json.loads(result.stdout)
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            item_futures = {
+                executor.submit(fetch_item, (item_id, fields)): item_id 
+                for item_id, fields in item_groups.items()
+            }
+            
+            for future in concurrent.futures.as_completed(item_futures):
+                try:
+                    item_id, fields, item_data = future.result()
+                    
+                    # Extract requested fields from the JSON
+                    for key, field_info in fields.items():
+                        field_name = field_info['field']
+                        if field_name:
+                            # Look for the field in the item data
+                            field_value = None
+                            if 'fields' in item_data:
+                                for field in item_data['fields']:
+                                    if field.get('label') == field_name or field.get('id') == field_name:
+                                        field_value = field.get('value', '')
+                                        break
+                            
+                            if field_value is not None:
+                                processed_op_values[key] = field_value
+                            else:
+                                # Fall back to individual command
+                                fallback_result = subprocess.run(
+                                    field_info['command'].split(),
+                                    capture_output=True, text=True, check=True
+                                )
+                                processed_op_values[key] = fallback_result.stdout.strip()
+                        else:
+                            # No specific field, use the original command
+                            fallback_result = subprocess.run(
+                                field_info['command'].split(),
+                                capture_output=True, text=True, check=True
+                            )
+                            processed_op_values[key] = fallback_result.stdout.strip()
+                            
+                except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
+                    # If optimized approach fails, fall back to individual commands
+                    item_id = item_futures[future]
+                    fields = item_groups[item_id]
+                    for key, field_info in fields.items():
+                        try:
+                            result = subprocess.run(
+                                field_info['command'].split(),
+                                capture_output=True, text=True, check=True
+                            )
+                            processed_op_values[key] = result.stdout.strip()
+                        except subprocess.CalledProcessError as err:
+                            logger.error(msg=f"Error executing command '{field_info['command']}': {err}")
+                            print(f"Error executing command '{field_info['command']}': {err}")
+                            sys.exit(1)
+    
+    # Process individual commands in parallel using ThreadPoolExecutor
+    if individual_commands:
+        def run_op_command(key_command_tuple):
+            key, op_command = key_command_tuple
+            result = subprocess.run(
+                op_command.split(), capture_output=True, text=True, check=True
+            )
+            return key, result.stdout.strip()
+        
+        # Run commands in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_key = {
+                executor.submit(run_op_command, (key, cmd)): key 
+                for key, cmd in individual_commands.items()
+            }
+            
+            for future in concurrent.futures.as_completed(future_to_key):
+                try:
+                    key, value = future.result()
+                    processed_op_values[key] = value
+                except subprocess.CalledProcessError as err:
+                    logger.error(msg=f"Error executing 1Password command: {err}")
+                    print(f"Error executing 1Password command: {err}")
+                    sys.exit(1)
+                except FileNotFoundError:
+                    logger.error(
+                        msg="Error: 'op' command not found. Ensure 1Password CLI is installed and accessible."
+                    )
+                    print(
+                        "Error: 'op' command not found. Ensure 1Password CLI is installed and accessible."
+                    )
+                    sys.exit(1)
+    
+    # Combine results
+    result = {k: str(v) for k, v in regular_values.items()}
+    result.update(processed_op_values)
+    return result
 
 
 class Configuration:
@@ -207,58 +374,57 @@ class Configuration:
         self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
 
         try:
-            self.api_url: str = get_conf_value(
-                op_command=self.config["ttrss"].get("api_url", "")
-            )
-            self.username: str = get_conf_value(
-                op_command=self.config["ttrss"].get("username", "")
-            )
-            self.password: str = get_conf_value(
-                op_command=self.config["ttrss"].get("password", "")
-            )
+            # Optimize TTRSS credentials for faster startup
+            ttrss_config_raw = {
+                "api_url": self.config["ttrss"].get("api_url", ""),
+                "username": self.config["ttrss"].get("username", ""),
+                "password": self.config["ttrss"].get("password", "")
+            }
+            ttrss_processed = optimize_op_commands(ttrss_config_raw)
+            
+            self.api_url: str = ttrss_processed["api_url"]
+            self.username: str = ttrss_processed["username"] 
+            self.password: str = ttrss_processed["password"]
 
             # Get general settings with defaults
             general_config = self.config.get("general", {})
-            self.download_folder: Path = Path(
-                get_conf_value(
-                    op_command=general_config.get(
-                        "download_folder", os.path.expanduser(path="~/Downloads")
-                    )
+            general_config_raw = {
+                "download_folder": general_config.get(
+                    "download_folder", os.path.expanduser(path="~/Downloads")
                 )
-            )
+            }
+            general_processed = optimize_op_commands(general_config_raw)
+            
+            self.download_folder: Path = Path(general_processed["download_folder"])
             self.auto_mark_read: bool = general_config.get("auto_mark_read", True)
             self.cache_size: int = general_config.get("cache_size", 10000)
             self.default_theme: str = general_config.get("default_theme", "dark")
 
-            # Get readwise settings
+            # Batch process all other optional settings
             readwise_config = self.config.get("readwise", {})
-            self.readwise_token: str = get_conf_value(
-                op_command=readwise_config.get("token", "")
-            )
+            obsidian_config = self.config.get("obsidian", {})
+            
+            optional_config_raw = {
+                "readwise_token": readwise_config.get("token", ""),
+                "obsidian_directory": obsidian_config.get("directory", ""),
+                "obsidian_vault": obsidian_config.get("vault", ""),
+                "obsidian_folder": obsidian_config.get("folder", ""),
+                "obsidian_default_tag": obsidian_config.get("default_tag", ""),
+                "obsidian_template": obsidian_config.get("template", "")
+            }
+            optional_processed = optimize_op_commands(optional_config_raw)
+
+            # Get readwise settings
+            self.readwise_token: str = optional_processed["readwise_token"]
 
             # Get obsidian settings
-            obsidian_config = self.config.get("obsidian", {})
-            self.obsidian_directory: str = get_conf_value(
-                op_command=obsidian_config.get("directory", "")
-            )
-            self.obsidian_vault: str = get_conf_value(
-                op_command=obsidian_config.get("vault", "")
-            )
-            self.obsidian_folder: str = get_conf_value(
-                op_command=obsidian_config.get("folder", "")
-            )
-            self.obsidian_default_tag: str = get_conf_value(
-                op_command=obsidian_config.get("default_tag", "")
-            )
-            self.obsidian_include_tags: bool = obsidian_config.get(
-                "include_tags", False
-            )
-            self.obsidian_include_labels: bool = obsidian_config.get(
-                "include_labels", True
-            )
-            self.obsidian_template: str = get_conf_value(
-                op_command=obsidian_config.get("template", "")
-            )
+            self.obsidian_directory: str = optional_processed["obsidian_directory"]
+            self.obsidian_vault: str = optional_processed["obsidian_vault"]
+            self.obsidian_folder: str = optional_processed["obsidian_folder"]
+            self.obsidian_default_tag: str = optional_processed["obsidian_default_tag"]
+            self.obsidian_include_tags: bool = obsidian_config.get("include_tags", False)
+            self.obsidian_include_labels: bool = obsidian_config.get("include_labels", True)
+            self.obsidian_template: str = optional_processed["obsidian_template"]
 
             # Make sure download folder exists
             self.download_folder.mkdir(parents=True, exist_ok=True)

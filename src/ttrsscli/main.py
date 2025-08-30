@@ -7,9 +7,6 @@ from urllib3.exceptions import NameResolutionError
 
 from ttrsscli.ui.app import ttrsscli
 
-# Create the application instance
-app = ttrsscli()
-
 
 def main() -> None:
     """Run the ttrsscli app.
@@ -22,6 +19,8 @@ def main() -> None:
         ttrsscli --help
     """
     try:
+        # Create the application instance only when running
+        app = ttrsscli()
         app.run()
     except KeyboardInterrupt:
         # Handle Ctrl+C gracefully
