@@ -90,11 +90,11 @@ Some thoughts are listed below:
 
 ### More functions
 
-> Implement more functions from the [Python API] https://github.com/Vassius/ttrss-python/blob/master/ttrss/client.py). For example add and remove feeds.
+> Implement more functions from the [Python API](https://github.com/Vassius/ttrss-python/blob/master/ttrss/client.py). For example add and remove feeds.
 
 I've done a fork of the `ttrss-python` library to be able to add some more features.
 
-- Should the tool use a [timer]( https://textual.textualize.io/api/timer/) to check that updater is running and indicate it at regular intervals?
+- Should the tool use a [timer](https://textual.textualize.io/api/timer/) to check that updater is running and indicate it at regular intervals?
 - Add code for [testing](https://textual.textualize.io/guide/testing/).
 - Switch to rich [markdown](https://rich.readthedocs.io/en/stable/markdown.html) to get more features and later images (see below).
 - Add support for [images](https://github.com/Textualize/textual/discussions/4345) via [rich-pixels](https://github.com/darrenburns/rich-pixels)
