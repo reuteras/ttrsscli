@@ -283,7 +283,7 @@ class TTRSSClient:
                         feed_props = feed
 
                         # Try to get feed URL from feed tree if not available
-                        if not feed_props is None and (
+                        if feed_props is not None and (
                             not hasattr(feed_props, "feed_url")
                             or (
                                 hasattr(feed_props, "feed_url")

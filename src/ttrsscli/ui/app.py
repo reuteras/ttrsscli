@@ -326,7 +326,7 @@ class ttrsscli(App[None]):
                 # Handle category selection -> refresh articles
                 if (
                     hasattr(highlighted_item, "id")
-                    and not highlighted_item.id is None
+                    and highlighted_item.id is not None
                     and highlighted_item.id.startswith("cat_")
                 ):
                     category_id = int(highlighted_item.id.replace("cat_", ""))
@@ -341,7 +341,7 @@ class ttrsscli(App[None]):
                 # Handle feed selection in expanded category view -> refresh articles
                 elif (
                     hasattr(highlighted_item, "id")
-                    and not highlighted_item.id is None
+                    and highlighted_item.id is not None
                     and highlighted_item.id.startswith("feed_")
                 ):
                     self.category_id = highlighted_item.id
@@ -350,7 +350,7 @@ class ttrsscli(App[None]):
                 # Handle feed title selection in article list -> navigate articles
                 elif (
                     hasattr(highlighted_item, "id")
-                    and not highlighted_item.id is None
+                    and highlighted_item.id is not None
                     and highlighted_item.id.startswith("ft_")
                 ):
                     if self.last_key == "j":
@@ -364,7 +364,7 @@ class ttrsscli(App[None]):
                 # Handle article selection -> display selected article content
                 elif (
                     hasattr(highlighted_item, "id")
-                    and not highlighted_item.id is None
+                    and highlighted_item.id is not None
                     and highlighted_item.id.startswith("art_")
                 ):
                     article_id = int(highlighted_item.id.replace("art_", ""))
@@ -388,7 +388,7 @@ class ttrsscli(App[None]):
                 # Handle category selection
                 if (
                     hasattr(selected_item, "id")
-                    and not selected_item.id is None
+                    and selected_item.id is not None
                     and selected_item.id.startswith("cat_")
                 ):
                     category_id = int(selected_item.id.replace("cat_", ""))
@@ -398,7 +398,7 @@ class ttrsscli(App[None]):
                 # Handle article selection
                 elif (
                     hasattr(selected_item, "id")
-                    and not selected_item.id is None
+                    and selected_item.id is not None
                     and selected_item.id.startswith("art_")
                 ):
                     article_id = int(selected_item.id.replace("art_", ""))
@@ -1272,7 +1272,7 @@ class ttrsscli(App[None]):
         is_cat = False
         if (
             not isinstance(show_id, int)
-            and not show_id is None
+            and show_id is not None
             and show_id.startswith("feed_")
         ):
             # We have a feed ID
