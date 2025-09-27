@@ -25,7 +25,7 @@
 
 ### Install
 
-```
+```bash
 uvx tool install ttrsscli
 ```
 
@@ -35,7 +35,7 @@ After that you can just run `ttrsscli`.
 
 ## Keyboard Shortcuts
 
-```sh
+```markdown
 ## Navigation
 - **j / k / n**: Navigate articles
 - **J / K**: Navigate categories
