@@ -104,7 +104,7 @@ ttrsscli                      # Run the CLI app
 - Articles can be grouped by feed or shown as flat list
 - Content displays rendered markdown with custom viewer
 
-**State Management**: 
+**State Management**:
 
 - App maintains current article, category, and UI state
 - Uses reactive properties for UI updates
@@ -130,4 +130,3 @@ ttrsscli                      # Run the CLI app
 ### Testing Strategy
 
 No test framework currently configured. When adding tests, consider using pytest with textual's built-in testing utilities for UI components.
-

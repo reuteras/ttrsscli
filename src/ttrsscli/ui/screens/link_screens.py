@@ -268,7 +268,7 @@ class LinkSelectionScreen(ModalScreen):
         """
         try:
             os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
-            
+
             # Import readwise only when needed, after setting environment variable
             import readwise  # noqa: PLC0415
             from readwise.model import PostResponse  # noqa: PLC0415
