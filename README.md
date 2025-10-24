@@ -1,5 +1,9 @@
 # ttrsscli - A CLI Tool for Tiny Tiny RSS
 
+> **Note:**
+> 
+> This project is no longer maintainted since I've switched to use [miniflux.app](https://miniflux.app).
+
 **This has been a sample project for me to use AI to create an app.** The initial version with limited functionality was created with OpenAI but it been rewritten by me even though I have used AI to help me with some parts of the code. Especially parts with textual since it is a new library for me.
 
 `ttrsscli` is a terminal-based application that provides a text user interface (TUI) for reading articles from a [Tiny Tiny RSS](https://tt-rss.org/) instance. Built using [Textual](https://github.com/Textualize/textual), `ttrsscli` allows users to navigate and read their RSS feeds efficiently from the command line.
